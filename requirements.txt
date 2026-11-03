@@ -1,0 +1,11 @@
+streamlit>=1.35.0
+pymupdf>=1.24.0
+python-docx>=1.1.0
+ollama>=0.3.0
+networkx>=3.2.0
+pyvis>=0.3.2
+openpyxl>=3.1.0
+pandas>=2.0.0
+duckdb>=1.0.0
+pdfplumber>=0.11.0
+bankstatementparser>=0.0.29

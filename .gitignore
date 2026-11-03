@@ -1,0 +1,34 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Logs and runtime data
+*.log
+app.log
+logs/
+ultimo_dossier_unificato.md
+grafo.html
+
+# Sensitive user investigative documents (AML / CTU / Privacy)
+*.pdf
+*.docx
+*.xlsx
+*.csv
+*.xml
+*.jsonl
+*.zip
+*.tar.gz
