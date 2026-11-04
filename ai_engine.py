@@ -343,3 +343,54 @@ Redigi la relazione con prosa autorevole, peritale, analitica ed esaustiva, evit
     except Exception as e:
         log.error(f"Errore generazione dossier globale: {e}", exc_info=True)
         return f"Errore durante l'elaborazione del dossier: {e}"
+
+
+def genera_deduzioni(
+    riassunto_grafo: str,
+    testo_nuovo_documento: str,
+    nome_documento: str = "",
+    model: str = None,
+) -> str:
+    """
+    Analisi Cross-Documentale Incrementale:
+    Riceve il riassunto cumulativo del grafo preesistente + il testo del nuovo documento acquisito.
+    Identifica punti salienti, connessioni e sovrapposizioni con atti precedenti e deduzioni investigative AML.
+    """
+    if not model:
+        model = get_active_model()
+
+    rif_doc = f"'{nome_documento}'" if nome_documento else "nuovo documento acquisito"
+
+    prompt = f"""
+Sei un analista ed investigatore forense antiriciclaggio (AML).
+È appena stato inserito un nuovo documento ({rif_doc}) nel fascicolo d'indagine.
+
+======================================================================
+STATO CUMULATIVO DEL DATABASE D'INDAGINE (RETE DI RELAZIONI GIÀ ACQUISITE):
+======================================================================
+{riassunto_grafo}
+
+======================================================================
+ESTRATTO DEL NUOVO DOCUMENTO ACQUISITO ({rif_doc}):
+======================================================================
+{testo_nuovo_documento[:14000]}
+
+======================================================================
+COMPITO INVESTIGATIVO - ANALISI CROSS-DOCUMENTALE:
+======================================================================
+1. **Punti Salienti del Documento**: sintetizza gli elementi chiave dell'atto appena acquisito (soggetti fisici/giuridici, importi, date, causali, ruoli).
+2. **Collegamenti e Sovrapposizioni Cross-Documentali**: evidenzia TUTTI i punti di contatto, persone, società, conti bancari o intermediari che compaiono sia nel nuovo documento sia negli atti preesistenti già registrati nel grafo.
+3. **Deduzioni Investigative Forensi**: formula ipotesi investigative concrete (es. società schermo, prestanome/teste di legno, passaggi anomali o triangolazioni di denaro, conflitti di interesse, anomalie antiriciclaggio).
+
+Sii rigoroso, cita espressamente le fonti e i collegamenti tra documenti diversi.
+"""
+    try:
+        res = ollama.chat(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.1, "num_ctx": 16384},
+        )
+        return res["message"]["content"]
+    except Exception as e:
+        log.error(f"Errore deduzioni cross-documentali: {e}", exc_info=True)
+        return f"Errore durante l'elaborazione delle deduzioni: {e}"

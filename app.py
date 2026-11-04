@@ -4,12 +4,14 @@ import datetime
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+import ollama
 
 from logger import log, leggi_ultimi_log
 from parser import analizza_ed_estrai, MAX_CARATTERI_CONSIGLIATI
 from ai_engine import (
     get_active_model,
     estrai_entita_e_relazioni_avanzato,
+    genera_deduzioni,
     genera_dossier_forense_globale,
     BEST_MODEL,
     FAST_MODEL,
@@ -159,42 +161,38 @@ st.markdown("""
         text-align: center;
     }
     .metric-val {
-        font-size: 1.55rem;
+        font-size: 1.45rem;
         font-weight: 700;
         color: #ffffff;
-        font-variant-numeric: tabular-nums;
-        line-height: 1.1;
+        letter-spacing: -0.02em;
     }
     .metric-lbl {
         font-size: 0.72rem;
-        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: var(--apple-text-secondary);
-        margin-top: 4px;
-        white-space: nowrap;
+        color: var(--apple-text-tertiary);
+        margin-top: 2px;
     }
 
-    .stButton > button {
-        background: linear-gradient(180deg, #1f6feb 0%, #1158c7 100%) !important;
+    .stButton>button {
+        background: var(--apple-blue) !important;
         color: #ffffff !important;
-        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border: none !important;
         border-radius: 10px !important;
+        padding: 8px 18px !important;
         font-weight: 600 !important;
-        font-size: 0.92rem !important;
-        padding: 10px 20px !important;
-        transition: all 0.18s ease !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+        font-size: 0.90rem !important;
+        transition: all 0.2s ease !important;
     }
-    .stButton > button:hover {
-        background: linear-gradient(180deg, #388bfd 0%, #1f6feb 100%) !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 14px rgba(10, 132, 255, 0.4) !important;
+    .stButton>button:hover {
+        background: var(--apple-blue-hover) !important;
+        box-shadow: 0 0 15px rgba(10, 132, 255, 0.4) !important;
+        transform: translateY(-1px);
     }
 
-    .stDownloadButton > button {
+    .stDownloadButton>button {
         background: rgba(255, 255, 255, 0.06) !important;
-        color: var(--apple-text-primary) !important;
+        color: #ffffff !important;
         border: 1px solid var(--apple-border) !important;
         border-radius: 10px !important;
         font-weight: 500 !important;
@@ -258,22 +256,6 @@ st.markdown("""
         padding: 24px 30px;
         line-height: 1.65;
     }
-    .timeline-item {
-        border-left: 2px solid var(--apple-blue);
-        padding-left: 16px;
-        margin-left: 8px;
-        margin-bottom: 16px;
-        position: relative;
-    }
-    .timeline-dot {
-        width: 10px;
-        height: 10px;
-        background: var(--apple-blue);
-        border-radius: 50%;
-        position: absolute;
-        left: -6px;
-        top: 4px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -284,6 +266,14 @@ if "dossier_globale" not in st.session_state:
     st.session_state.dossier_globale = None
 if "documenti_acquisiti" not in st.session_state:
     st.session_state.documenti_acquisiti = {}
+if "file_letti" not in st.session_state:
+    st.session_state.file_letti = set()
+if "storico" not in st.session_state:
+    st.session_state.storico = []
+if "chat_messages" not in st.session_state:
+    st.session_state.chat_messages = []
+if "file_forzati" not in st.session_state:
+    st.session_state.file_forzati = set()
 if "timestamp_analisi" not in st.session_state:
     st.session_state.timestamp_analisi = None
 
@@ -304,21 +294,14 @@ with st.sidebar:
 
     st.markdown("""
     <div style="margin-top: 6px; margin-bottom: 12px;">
-        <span class="apple-pill pill-blue">🔒 100% Offline (Metal ARM64)</span>
+        <span class="apple-pill pill-blue">🔒 100% Offline (Metal M1 Pro)</span>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### Modalità Operativa")
-    abilita_grafo = st.toggle(
-        "Genera Grafo & Entity Resolution",
-        value=True,
-        help="Attivo: deduplica persone e aziende per CF/PIVA, rileva cicli e disegna il grafo. Disattivo: genera solo il dossier testuale.",
-    )
-
-    st.markdown("### Metriche Fascicolo")
+    st.markdown("### Metriche Fascicolo Accumulato")
     num_nodi = len(st.session_state.gestore_grafo.grafo.nodes)
     num_archi = len(st.session_state.gestore_grafo.grafo.edges)
-    num_doc = len(st.session_state.documenti_acquisiti)
+    num_doc = len(st.session_state.file_letti)
 
     st.markdown(f"""
     <div class="metric-row">
@@ -338,7 +321,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # Rilevamento pattern investigativi stile Belkasoft / Cellebrite
-    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici() if abilita_grafo else {}
+    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
     cicli = schemi.get("flussi_circolari", [])
     if cicli:
         st.markdown(f"""
@@ -370,9 +353,12 @@ with st.sidebar:
             "grafo_dati": st.session_state.gestore_grafo.esporta_stato(),
             "dossier_globale": st.session_state.dossier_globale,
             "documenti_acquisiti": {
-                k: {"caratteri": v["caratteri"], "num_blocchi": v["num_blocchi"]}
+                k: {"caratteri": v.get("num_caratteri", v.get("caratteri", 0)), "num_blocchi": v.get("num_blocchi", 1), "estensione": v.get("estensione", "")}
                 for k, v in st.session_state.documenti_acquisiti.items()
             },
+            "file_letti": list(st.session_state.file_letti),
+            "storico": st.session_state.storico,
+            "chat_messages": st.session_state.chat_messages,
             "timestamp_analisi": st.session_state.timestamp_analisi,
         }
         st.download_button(
@@ -383,11 +369,15 @@ with st.sidebar:
             help="Scarica il file sessione .json per continuare in seguito",
         )
     with c_s2:
-        if st.button("🗑️ Svuota", help="Azzera il fascicolo, il grafo e il dossier"):
-            log.info("Reset fascicolo richiesto dall'utente: azzeramento totale")
+        if st.button("🗑️ Reset", help="Azzera il fascicolo, il grafo, lo storico e la chat"):
+            log.info("Reset indagine richiesto dall'utente: azzeramento totale")
             st.session_state.gestore_grafo = GestoreGrafo()
             st.session_state.dossier_globale = None
             st.session_state.documenti_acquisiti = {}
+            st.session_state.file_letti = set()
+            st.session_state.storico = []
+            st.session_state.chat_messages = []
+            st.session_state.file_forzati = set()
             st.session_state.timestamp_analisi = None
             st.rerun()
 
@@ -399,12 +389,16 @@ with st.sidebar:
                 dati = json.loads(file_stato.read().decode("utf-8"))
                 st.session_state.gestore_grafo.importa_stato(dati.get("grafo_dati", {}))
                 st.session_state.dossier_globale = dati.get("dossier_globale")
+                st.session_state.documenti_acquisiti = dati.get("documenti_acquisiti", {})
+                st.session_state.file_letti = set(dati.get("file_letti", []))
+                st.session_state.storico = dati.get("storico", [])
+                st.session_state.chat_messages = dati.get("chat_messages", [])
                 st.session_state.timestamp_analisi = dati.get("timestamp_analisi")
-                st.success("Sessione ripristinata!")
+                st.success("Sessione ripristinata con successo!")
                 st.rerun()
             except Exception as e:
                 log.error(f"Errore caricamento stato: {e}", exc_info=True)
-                st.error(f"Errore: {e}")
+                st.error(f"Errore ripristino: {e}")
 
     if num_nodi > 0:
         st.markdown("### Export Forense Multi-Standard")
@@ -460,154 +454,212 @@ st.markdown("""
     <div style="font-size: 2.2rem;">⚖️</div>
     <div>
         <h1 class="apple-header-title">Forensic AI Offline</h1>
-        <p class="apple-header-subtitle">Analisi Forense Multi-Documento, Link Analysis e Rilevamento Pattern (Cellebrite / Magnet / Belkasoft Architecture).</p>
+        <p class="apple-header-subtitle">Analisi Forense Incrementale, Link Analysis Deterministica e Ragionamento Ibrido (M1 Pro / Metal Architecture).</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# DROPZONE MULTI-DOCUMENTO
+# DROPZONE INCREMENTALE MULTI-DOCUMENTO
 with st.container():
     files = st.file_uploader(
-        "Carica tutti gli atti del fascicolo (PDF, Word DOCX, Excel XLSX/CSV, TXT, XML)",
+        "Trascina qui SOS, Visure CCIAA, Bilanci, Estratti Conto (PDF, DOCX, XLSX, CSV, XML, TXT)",
         type=["pdf", "docx", "xlsx", "xls", "csv", "txt", "xml"],
         accept_multiple_files=True,
-        help="Supporta contemporaneamente Visure CCIAA, SOS, Bilanci, Estratti Conto, Rogiti, Contratti e Perizie CTU.",
+        help="Supporta acquisizione progressiva cumulativa: ogni nuovo documento arricchisce la memoria del grafo esistente senza sovrascriverla.",
     )
 
-    c_info, c_action = st.columns([2, 1], gap="medium")
-    with c_info:
-        tot_file = len(files) if files else 0
-        if tot_file > 0:
-            st.markdown(f"**Atti nel Fascicolo ({tot_file})**: {', '.join([f.name for f in files])}")
-        else:
-            st.markdown("<span style='color: var(--apple-text-secondary);'>Nessun documento inserito nel fascicolo d'indagine.</span>", unsafe_allow_html=True)
+    if files:
+        for f in files:
+            if f.name not in st.session_state.file_letti:
+                diag = analizza_ed_estrai(f)
+                ok = True
 
-    with c_action:
-        bottone_attivo = (tot_file > 0)
-        testo_bottone = f"🚀 Avvia Analisi Forense Incrociata ({tot_file} Atti)" if tot_file > 0 else "Trascina file nel box sopra per iniziare"
-        avvia_analisi = st.button(testo_bottone, disabled=not bottone_attivo, use_container_width=True)
+                # 1. Alert Diagnostico OCR
+                if diag["manca_ocr"]:
+                    if diag.get("perc_senza_ocr", 0) > 0.5:
+                        st.error(f"🛑 **{f.name}**: Documento scansionato privo di testo selezionabile ({len(diag['pagine_senza_ocr'])}/{diag['totale_pagine']} pagine cieche: {diag['pagine_senza_ocr']}). Applicare un software di OCR prima di acquisire l'atto.")
+                        ok = False
+                    else:
+                        st.warning(f"⚠️ **{f.name}**: Pagine {diag['pagine_senza_ocr']} prive di testo leggibile.")
 
-    # ESECUZIONE DELL'ANALISI GLOBALE INCROCIATA
-    if avvia_analisi and files:
-        progress_container = st.container()
-        with progress_container:
-            prog_bar = st.progress(0.01)
-            status_text = st.empty()
+                # 2. Alert Volume Documentale con Bypass
+                if diag["troppo_lungo"] and ok:
+                    if f.name not in st.session_state.file_forzati:
+                        st.warning(f"✂️ **{f.name}**: File di {diag['num_caratteri']:,} caratteri (supera la soglia ottimale di {MAX_CARATTERI_CONSIGLIATI:,}).")
+                        if st.button(f"Forza lettura per {f.name}", key=f"force_{f.name}"):
+                            st.session_state.file_forzati.add(f.name)
+                            st.rerun()
+                        ok = False
 
-        t_global_start = time.time()
+                # 3. Ingestione Incrementale & Entity Resolution
+                if ok:
+                    with st.spinner(f"🔍 [Entity Resolution & Unione della Conoscenza] Analisi incrementale di '{f.name}'..."):
+                        # Estrazione entità e relazioni dal documento
+                        dati_json = estrai_entita_e_relazioni_avanzato(
+                            blocchi_testo=diag["blocchi"],
+                            nome_file=f.name,
+                            model=modello_selezionato,
+                        )
+                        # Fusione istantanea su grafo condiviso esistente
+                        st.session_state.gestore_grafo.aggiungi_dati(dati_json, f.name)
 
-        def update_progress(perc: float, msg: str, tokens: int = 0, elapsed: float = 0.0):
-            p_val = round(min(max(perc, 0.01), 1.0), 2)
-            prog_bar.progress(p_val)
-            
-            tot_sec = int(time.time() - t_global_start)
-            minuti = tot_sec // 60
-            secondi = tot_sec % 60
-            timer_str = f"{minuti:02d}:{secondi:02d}s"
+                        # Generazione deduzioni cross-documentali immediate
+                        riassunto_rete = st.session_state.gestore_grafo.ottieni_riassunto()
+                        deduzione = genera_deduzioni(
+                            riassunto_grafo=riassunto_rete,
+                            testo_nuovo_documento=diag["testo"],
+                            nome_documento=f.name,
+                            model=modello_selezionato,
+                        )
 
-            info_extra = []
-            info_extra.append(f"⏱️ Tempo: {timer_str}")
-            if tokens > 0:
-                info_extra.append(f"⚡ Token: {tokens:,}")
-            info_extra.append("🟢 Metal GPU Attivo")
-            extra_str = " &nbsp;|&nbsp; ".join(info_extra)
-
-            status_text.markdown(f"""
-            <div class="status-card" style="border: 1px solid rgba(10, 132, 255, 0.4); background: rgba(10, 132, 255, 0.06);">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 600; color: #58a6ff; font-size: 0.95rem;">{msg}</span>
-                    <span class="apple-pill pill-blue" style="font-size: 0.85rem; font-weight: 700;">{int(p_val * 100)}%</span>
-                </div>
-                <div style="margin-top: 6px; font-size: 0.80rem; color: #86868b; display: flex; justify-content: space-between;">
-                    <span>{extra_str}</span>
-                    <span style="color: #30D158; font-weight: 600;">● In elaborazione</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        t_global_start = time.time()
-        log.info(f"Avvio indagine integrata globale su {len(files)} documenti")
-
-        # FASE 1: Ingestione e Parsing diagnostico
-        update_progress(0.05, f"📄 [Fase 1/4] Ingestione e parsing diagnostico di {len(files)} documenti...")
-        documenti_estratti = {}
-        st.session_state.gestore_grafo = GestoreGrafo()
-
-        for idx, f in enumerate(files, start=1):
-            diag = analizza_ed_estrai(f)
-            documenti_estratti[f.name] = diag
-            st.session_state.documenti_acquisiti[f.name] = {
-                "testo": diag["testo"],
-                "caratteri": diag["num_caratteri"],
-                "num_blocchi": diag["num_blocchi"],
-                "pagine": diag["totale_pagine"],
-                "manca_ocr": diag["manca_ocr"],
-                "estensione": diag["estensione"],
-            }
-            perc_fase1 = 0.05 + (0.15 * (idx / len(files)))
-            update_progress(perc_fase1, f"📄 Letto documento {idx}/{len(files)}: '{f.name}' ({diag['num_caratteri']:,} caratteri)")
-
-        # FASE 2 & 3: Estrazione Entità e Risoluzione Identità su Grafo Unificato
-        n_tot = len(files)
-        for idx, (nome_file, diag) in enumerate(documenti_estratti.items(), start=1):
-            if abilita_grafo:
-                base_p = 0.20 + (0.45 * ((idx - 1) / n_tot))
-                peso_p = 0.45 * (1 / n_tot)
-                dati_json = estrai_entita_e_relazioni_avanzato(
-                    blocchi_testo=diag["blocchi"],
-                    nome_file=nome_file,
-                    model=modello_selezionato,
-                    callback_progresso=update_progress,
-                    base_perc=base_p,
-                    peso_perc=peso_p,
-                )
-                st.session_state.gestore_grafo.aggiungi_dati(dati_json, nome_file)
-
-        update_progress(0.70, "🕸️ [Fase 3/4] Entity Resolution globale, Master Timeline e Link Analysis...")
-
-        # FASE 4: Generazione Dossier Forense Globale Unificato
-        update_progress(0.75, f"🧠 [Fase 4/4] Sintesi Dossier Forense Globale con {modello_selezionato}...")
-        testi_sintetici = {k: v["testo"] for k, v in documenti_estratti.items()}
-
-        dossier_unificato = genera_dossier_forense_globale(
-            gestore_grafo=st.session_state.gestore_grafo,
-            estratti_documenti=testi_sintetici,
-            model=modello_selezionato,
-            ha_grafo=abilita_grafo,
-            callback_progresso=update_progress,
-        )
-
-        t_elapsed = round(time.time() - t_global_start, 1)
-        st.session_state.dossier_globale = dossier_unificato
-        st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-
-        update_progress(1.0, f"✅ Fascicolo analizzato e dossier integrato completato in {t_elapsed}s!")
-        log.info(f"Dossier globale completato in {t_elapsed}s per {len(files)} documenti")
-        time.sleep(0.4)
-        st.rerun()
+                        # Archiviazione nello storico analitico
+                        st.session_state.storico.insert(0, {
+                            "file": f.name,
+                            "analisi": deduzione,
+                            "caratteri": diag["num_caratteri"],
+                            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+                        })
+                        st.session_state.file_letti.add(f.name)
+                        st.session_state.documenti_acquisiti[f.name] = diag
+                        st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                        st.success(f"✅ Acquisito e fuso nel grafo condiviso: {f.name}")
+                        time.sleep(0.5)
+                        st.rerun()
 
 st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
 
-# TABS PRINCIPALI
-tab_dossier, tab_mappa, tab_schemi, tab_timeline, tab_convergenze, tab_documenti = st.tabs([
-    "⚖️ Dossier Forense Globale",
+# TABS PRINCIPALI (Chat Investigativa Deterministica + Dossier + Grafo + Report Atti + Schemi)
+tab_chat, tab_dossier, tab_mappa, tab_report_atti, tab_schemi, tab_timeline, tab_convergenze = st.tabs([
+    "💬 Chat Investigativa Forense",
+    "⚖️ Dossier Forense Globale CTU",
     "🕸️ Link Analysis & Grafo",
-    "🎯 Schemi & Pattern (Cellebrite/Belka)",
+    "📑 Report Atti & Deduzioni",
+    "🎯 Schemi & Pattern AML",
     "⏱️ Master Timeline Eventi",
     "🔗 Convergenze & Anagrafiche",
-    "📂 Fascicolo Atti",
 ])
 
-# TAB 1: DOSSIER FORENSE COMPLESSIVO UNIFICATO
+# ==============================================================================
+# TAB 1: CHAT INVESTIGATIVA CON RISOLUZIONE DETERMINISTICA IBRIDA
+# ==============================================================================
+with tab_chat:
+    st.markdown("""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div>
+            <h3 style="margin: 0; font-size: 1.25rem;">💬 Chat Investigativa Deterministica</h3>
+            <p style="margin: 4px 0 0 0; color: #86868b; font-size: 0.85rem;">
+                Interroga il fascicolo con <strong>risoluzione ibrida</strong>: i quesiti su legami tra persone e quote vengono risolti matematicamente da <code>NetworkX</code> prima della risposta di Ollama.
+            </p>
+        </div>
+        <div>
+            <span class="apple-pill pill-blue">⚡ Shortest Path + Ollama (M1 Pro)</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Visualizzazione dello storico conversazionale
+    for msg in st.session_state.chat_messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Chat Input Interattivo
+    if query := st.chat_input("Es: 'MARIO ROSSI ha contatti con ALFA SRL?' oppure 'Cosa detiene MARIO ROSSI?'"):
+        with st.chat_message("user"):
+            st.markdown(query)
+        st.session_state.chat_messages.append({"role": "user", "content": query})
+
+        # RISOLUZIONE DETERMINISTICA IBRIDA
+        info_matematica = ""
+        q_lower = query.lower()
+
+        # Individua soggetti citati tra i nodi censiti
+        nodi_censiti = list(st.session_state.gestore_grafo.grafo.nodes)
+        soggetti_trovati = []
+        for n in nodi_censiti:
+            norm_q = query.upper().replace(" ", "_")
+            norm_n = st.session_state.gestore_grafo.normalizza_nome(n)
+            if n.lower() in q_lower or (len(norm_n) > 4 and norm_n in norm_q):
+                soggetti_trovati.append(n)
+
+        # Fallback di risoluzione token
+        if len(soggetti_trovati) < 2:
+            parole = [p for p in query.split() if len(p) >= 3 and p.lower() not in {"chi", "che", "cosa", "con", "tra", "del", "della", "delle", "dei", "negli", "nella", "ha", "hanno", "avuto", "contatti", "legami", "quote", "detiene", "partecipazioni", "società", "conto", "iban"}]
+            for p in parole:
+                ris = st.session_state.gestore_grafo._risolvi_nome_per_ricerca(p)
+                if ris and ris not in soggetti_trovati:
+                    soggetti_trovati.append(ris)
+
+        # 1. Domanda su Contatti / Collegamenti / Shortest Path
+        if any(k in q_lower for k in ["contatt", "collegat", "legam", "rapport", "passaggi", "conness"]) and len(soggetti_trovati) >= 2:
+            info_matematica = st.session_state.gestore_grafo.analizza_contatti(soggetti_trovati[0], soggetti_trovati[1])
+        # 2. Domanda su Quote / Partecipazioni / Cariche
+        elif any(k in q_lower for k in ["detiene", "partecip", "possied", "quot", "carich", "amministra", "ruol"]) and len(soggetti_trovati) >= 1:
+            info_matematica = st.session_state.gestore_grafo.calcola_partecipazioni(soggetti_trovati[0])
+
+        with st.chat_message("assistant"):
+            with st.spinner("Elaborazione investigativa con riscontro matematico..."):
+                contesto_generale = st.session_state.gestore_grafo.ottieni_riassunto()
+                prompt_sistema = f"""
+Sei un Perito Forense Antiriciclaggio (AML) e Investigatore della Guardia di Finanza.
+Rispondi alla domanda dell'utente con massimo rigore, chiarezza motivazionale e citando le fonti degli atti.
+
+RISCONTRI MATEMATICI DETERMINISTICI (PREVALENZA ASSOLUTA - NON CONTRADDIRE QUESTI FATTI):
+{info_matematica if info_matematica else "Nessun vincolo di cammino matematico puntuale applicabile."}
+
+QUADRO COMPLESSIVO DELLA RETE D'INDAGINE:
+{contesto_generale}
+"""
+                messaggi_ollama = [{"role": "system", "content": prompt_sistema}]
+                messaggi_ollama.extend(st.session_state.chat_messages[-6:])
+
+                try:
+                    res = ollama.chat(
+                        model=modello_selezionato,
+                        messages=messaggi_ollama,
+                        options={"temperature": 0.1, "num_ctx": 8192},
+                    )
+                    testo_risposta = res["message"]["content"]
+                except Exception as e:
+                    testo_risposta = f"Errore durante l'interrogazione del modello locale: {e}"
+
+                st.markdown(testo_risposta)
+                st.session_state.chat_messages.append({"role": "assistant", "content": testo_risposta})
+
+# ==============================================================================
+# TAB 2: DOSSIER FORENSE COMPLESSIVO UNIFICATO (RELAZIONE CTU 7 CAPITOLI)
+# ==============================================================================
 with tab_dossier:
+    c_btn1, c_btn2 = st.columns([2, 1])
+    with c_btn1:
+        st.markdown(f"**Fascicolo Attivo**: {len(st.session_state.file_letti)} atti acquisiti ({len(st.session_state.gestore_grafo.grafo.nodes)} entità unificate, {len(st.session_state.gestore_grafo.grafo.edges)} relazioni probatorie).")
+    with c_btn2:
+        bottone_dossier = st.button(
+            "🚀 Compila / Aggiorna Dossier Globale CTU",
+            disabled=(len(st.session_state.file_letti) == 0),
+            use_container_width=True,
+            help="Redige la perizia integrata strutturata su 7 capitoli giudiziari incrociando tutti i documenti caricati finora.",
+        )
+
+    if bottone_dossier and st.session_state.documenti_acquisiti:
+        with st.spinner("Redazione della perizia forense unificata su tutti gli atti del fascicolo..."):
+            testi_per_dossier = {k: v["testo"] for k, v in st.session_state.documenti_acquisiti.items()}
+            dossier_unificato = genera_dossier_forense_globale(
+                gestore_grafo=st.session_state.gestore_grafo,
+                estratti_documenti=testi_per_dossier,
+                model=modello_selezionato,
+                ha_grafo=True,
+            )
+            st.session_state.dossier_globale = dossier_unificato
+            st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+            st.rerun()
+
     if not st.session_state.dossier_globale:
         st.markdown("""
         <div class="apple-card" style="text-align: center; padding: 45px 20px;">
             <div style="font-size: 2.3rem; margin-bottom: 12px;">⚖️</div>
-            <h3 style="margin: 0; color: #ffffff; font-size: 1.2rem;">Nessun Dossier Ancora Generato</h3>
+            <h3 style="margin: 0; color: #ffffff; font-size: 1.2rem;">Nessun Dossier Globale Ancora Generato</h3>
             <p style="color: #86868b; margin-top: 8px; font-size: 0.92rem; max-width: 650px; margin-left: auto; margin-right: auto;">
-                Carica gli atti del caso (Visure, SOS, Contratti, Perizie, Estratti Conto) e clicca su <strong>"Analizza Fascicolo"</strong>.
-                Il sistema estrarrà <strong>un'unica relazione forense integrata</strong> che incrocia tutti i documenti insieme.
+                Clicca su <strong>"Compila / Aggiorna Dossier Globale CTU"</strong> in alto a destra per redigere la perizia peritale giudiziaria di 7 capitoli che incrocia analiticamente tutti i documenti finora acquisiti.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -615,7 +667,7 @@ with tab_dossier:
         st.markdown(f"""
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
             <div>
-                <span class="apple-pill pill-green">✅ Relazione Forense Unificata</span>
+                <span class="apple-pill pill-green">✅ Relazione Peritale Integrata</span>
                 <span style="color: #86868b; font-size: 0.85rem; margin-left: 10px;">Elaborata il {st.session_state.timestamp_analisi} su {len(st.session_state.documenti_acquisiti)} atti</span>
             </div>
         </div>
@@ -645,9 +697,7 @@ with tab_dossier:
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown(f"""
-        <div class="dossier-box">
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="dossier-box">', unsafe_allow_html=True)
         st.markdown(st.session_state.dossier_globale)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -659,19 +709,12 @@ with tab_dossier:
             mime="text/markdown",
         )
 
-# TAB 2: LINK ANALYSIS & GRAFO RELAZIONALE
+# ==============================================================================
+# TAB 3: LINK ANALYSIS & GRAFO RELAZIONALE VIS.JS + MERMAID
+# ==============================================================================
 with tab_mappa:
-    if not abilita_grafo:
-        st.markdown("""
-        <div class="apple-card" style="text-align: center; padding: 30px 20px;">
-            <div class="apple-pill pill-orange" style="margin-bottom: 10px;">⚡ Modalità Solo Testo</div>
-            <p style="color: #86868b; margin: 0; font-size: 0.9rem;">
-                Il grafo relazionale è disattivato. Attiva lo switch nella sidebar per abilitare la mappa visuale.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    elif len(st.session_state.gestore_grafo.grafo.nodes) == 0:
-        st.info("In attesa di eseguire l'analisi per generare la rete relazionale complessiva.")
+    if len(st.session_state.gestore_grafo.grafo.nodes) == 0:
+        st.info("In attesa di acquisire i primi documenti per generare la mappa relazionale.")
     else:
         cicli_rilevati = st.session_state.gestore_grafo.trova_cicli()
         if cicli_rilevati:
@@ -696,7 +739,6 @@ with tab_mappa:
         with open(html_path, "r", encoding="utf-8") as f:
             components.html(f.read(), height=alt_scelta + 10)
 
-        # SEZIONE MERMAID INTEGRATA
         st.markdown("---")
         st.markdown("#### 🧜 Esportazione & Integrazione Mermaid")
         st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Genera ed esporta il diagramma dell'indagine in formato Mermaid (compatibile con Markdown, Obsidian, GitHub e perizie):</p>", unsafe_allow_html=True)
@@ -720,9 +762,23 @@ with tab_mappa:
         with st.expander("Visualizza Codice Sorgente Mermaid", expanded=False):
             st.code(codice_mermaid, language="mermaid")
 
-# TAB 3: SCHEMI & PATTERN TOPOLOGICI (BELKASOFT / CELLEBRITE PATTERN)
+# ==============================================================================
+# TAB 4: REPORT ATTI & DEDUZIONI CUMULATIVE
+# ==============================================================================
+with tab_report_atti:
+    st.markdown("### 📑 Deduzioni e Punti Salienti per Singolo Atto Acquisito")
+    if not st.session_state.storico:
+        st.info("Nessun atto analizzato finora. Carica uno o più documenti nella dropzone in alto per visualizzare le deduzioni incrementali.")
+    else:
+        for idx, item in enumerate(st.session_state.storico):
+            with st.expander(f"📄 Atto: {item['file']} (Acquisito alle {item.get('timestamp', 'N/D')} - {item.get('caratteri', 0):,} caratteri)", expanded=(idx == 0)):
+                st.markdown(item["analisi"])
+
+# ==============================================================================
+# TAB 5: SCHEMI & PATTERN TOPOLOGICI (BELKASOFT / CELLEBRITE PATTERN)
+# ==============================================================================
 with tab_schemi:
-    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici() if abilita_grafo else {}
+    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
     if not schemi or (not schemi.get("flussi_circolari") and not schemi.get("hub_dominus") and not schemi.get("scatole_cinesi")):
         st.info("Nessuno schema o anomalia topologica individuata finora. Carica e analizza il fascicolo.")
     else:
@@ -750,128 +806,95 @@ with tab_schemi:
                 for h in hubs:
                     st.markdown(f"""
                     <div class="apple-card" style="border-left: 3px solid var(--apple-orange); padding: 10px 14px;">
-                        <span style="font-weight: 700; color: var(--apple-orange); font-size: 0.9rem;">{h['nodo']}</span>
-                        <div style="font-size: 0.8rem; color: #86868b; margin-top: 4px;">
-                            <strong>Connessioni:</strong> {h['connessioni']} | <strong>Tipo:</strong> {h['tipo']}
-                        </div>
+                        <span style="font-weight: 700; color: var(--apple-orange); font-size: 0.88rem;">{h['nodo']}</span><br/>
+                        <span style="font-size: 0.80rem; color: #86868b;">Grado: {h['connessioni']} | Atti: {h['atti_coinvolti']} | {h['tipo']}</span>
                     </div>
                     """, unsafe_allow_html=True)
 
         with col_p3:
             st.markdown("#### 🏢 Scatole Cinesi (Chain)")
-            catene_grezze = schemi.get("scatole_cinesi", [])
-            catene_uniche = []
-            viste = set()
-            for c in catene_grezze:
-                tup = tuple(c)
-                if tup not in viste:
-                    viste.add(tup)
-                    catene_uniche.append(c)
+            catene_raw = schemi.get("scatole_cinesi", [])
+            catene = []
+            viste_c = set()
+            for c in catene_raw:
+                tup_c = tuple(c)
+                if tup_c not in viste_c:
+                    viste_c.add(tup_c)
+                    catene.append(c)
 
-            if not catene_uniche:
-                st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Nessuna holding a cascata rilevata.</p>", unsafe_allow_html=True)
+            if not catene:
+                st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Nessuna catena societaria multilivello.</p>", unsafe_allow_html=True)
             else:
-                for c in catene_uniche[:8]:
-                    percorso_str = " ➔ ".join(c)
+                for c in catene[:8]:
                     st.markdown(f"""
-                    <div class="apple-card" style="border-left: 3px solid var(--apple-purple); padding: 10px 14px; margin-bottom: 8px;">
-                        <span style="font-weight: 600; color: #BF5AF2; font-size: 0.85rem;">Catena di Controllo:</span><br/>
-                        <span style="font-size: 0.85rem; color: #f0f6fc;">{percorso_str}</span>
+                    <div class="apple-card" style="border-left: 3px solid var(--apple-purple); padding: 10px 14px;">
+                        <span style="font-weight: 700; color: var(--apple-purple); font-size: 0.85rem;">Catena di Controllo:</span><br/>
+                        <span style="font-size: 0.82rem; color: #f0f6fc;">{' ➔ '.join(c)}</span>
                     </div>
                     """, unsafe_allow_html=True)
 
-        incongruenze = schemi.get("incongruenze", [])
-        if incongruenze:
-            st.markdown("---")
-            st.markdown("#### ⚠️ Incongruenze & Contraddizioni tra Atti (DocETL Resolve)")
-            st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Divergenze di cariche, quote societarie o dati contrastanti rilevati tra documenti diversi:</p>", unsafe_allow_html=True)
-            for inc in incongruenze:
-                fonti_str = ", ".join(inc.get("fonti", []))
-                st.markdown(f"""
-                <div class="apple-card" style="border-left: 3px solid #FFD60A; padding: 12px 16px; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 700; color: #FFD60A; font-size: 0.9rem;">{inc['soggetto']}</span>
-                        <span class="apple-pill pill-orange">{inc['tipo']}</span>
-                    </div>
-                    <div style="font-size: 0.84rem; color: #e6edf3; margin-top: 6px;">
-                        {inc['dettagli']}
-                    </div>
-                    <div style="font-size: 0.76rem; color: #86868b; margin-top: 4px;">
-                        <em>Atti a confronto: {fonti_str}</em>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-# TAB 4: MASTER TIMELINE DEGLI EVENTI (MAGNET AXIOM CHRONOLOGY)
+# ==============================================================================
+# TAB 6: MASTER TIMELINE CRONOLOGICA DEGLI EVENTI
+# ==============================================================================
 with tab_timeline:
-    timeline_events = st.session_state.gestore_grafo.eventi_timeline
-    if not timeline_events:
-        st.info("Nessun evento cronologico estratto finora.")
+    timeline_ev = st.session_state.gestore_grafo.ottieni_timeline_forense()
+    if not timeline_ev:
+        st.info("Nessun evento datato rilevato negli atti acquisiti.")
     else:
-        st.markdown("#### ⏱️ Cronologia Unificata di Eventi, Bonifici e Atti")
-        st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Eventi ordinati cronologicamente estratti da tutti i documenti del fascicolo:</p>", unsafe_allow_html=True)
-
-        for ev in timeline_events:
+        st.markdown(f"**Cronologia Giudiziaria Forense**: {len(timeline_ev)} eventi ricostruiti temporalmente.")
+        for ev in timeline_ev:
             st.markdown(f"""
-            <div class="timeline-item">
-                <div class="timeline-dot"></div>
+            <div class="apple-card" style="padding: 12px 18px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; color: #58a6ff; font-size: 0.92rem;">{ev['data']}</span>
-                    <span class="apple-pill pill-blue">{ev['tipo']}</span>
+                    <span style="font-weight: 700; color: #0A84FF; font-size: 0.95rem;">📅 {ev.get('data', 'Data non specificata')}</span>
+                    <span class="apple-pill pill-blue">{ev.get('fonte', 'Atto')}</span>
                 </div>
-                <div style="font-size: 0.9rem; color: #ffffff; margin-top: 4px;">
-                    <strong>{ev['da']}</strong> ➔ <strong>{ev['a']}</strong>
+                <div style="font-size: 0.88rem; color: #f0f6fc; margin-top: 6px;">
+                    <strong>{ev.get('soggetto_da', '')}</strong> ➔ <i>{ev.get('tipo', 'OPERAZIONE')}</i> ➔ <strong>{ev.get('soggetto_a', '')}</strong>
                 </div>
-                <div style="font-size: 0.82rem; color: #c9d1d9; margin-top: 4px;">
-                    {ev['dettagli']}
-                </div>
-                <div style="font-size: 0.76rem; color: #86868b; margin-top: 2px;">
-                    <em>Fonte Atto: {ev['atto']}</em>
+                <div style="font-size: 0.82rem; color: #86868b; margin-top: 4px;">
+                    {ev.get('dettagli', '')}
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-# TAB 5: CONVERGENZE E ANAGRAFICHE DEDUPLICATE
+# ==============================================================================
+# TAB 7: CONVERGENZE, ANAGRAFICHE & ANALYTICS DUCKDB
+# ==============================================================================
 with tab_convergenze:
-    if len(st.session_state.gestore_grafo.grafo.nodes) == 0:
-        st.info("In attesa dell'analisi del fascicolo.")
+    snodi = st.session_state.gestore_grafo.trova_convergenze_e_snodi()
+    if not snodi:
+        st.info("Nessun soggetto censito al momento.")
     else:
-        snodi = st.session_state.gestore_grafo.trova_convergenze_e_snodi()
-        soggetti_multi = [s for s in snodi if s["num_atti"] > 1]
-
-        if soggetti_multi:
-            st.markdown(f"#### 🔗 Punti di Convergenza Inter-Documentale ({len(soggetti_multi)} Soggetti Chiave)")
-            st.markdown("<p style='color: #86868b; font-size: 0.88rem;'>Soggetti che compaiono contemporaneamente in più documenti diversi fungendo da snodo:</p>", unsafe_allow_html=True)
-
-            col_s1, col_s2 = st.columns(2)
-            for idx, s in enumerate(soggetti_multi):
-                target_c = col_s1 if idx % 2 == 0 else col_s2
-                tipo = s["tipo"]
-                pill_c = "pill-blue" if tipo == "PERSONA" else ("pill-orange" if tipo == "SOCIETA" else "pill-green")
-                with target_c:
-                    st.markdown(f"""
-                    <div class="apple-card" style="border: 1px solid rgba(10, 132, 255, 0.35); padding: 14px 18px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 700; color: #58a6ff; font-size: 1.05rem;">{s['id']}</span>
-                            <span class="apple-pill {pill_c}">{tipo}</span>
-                        </div>
-                        <div style="margin-top: 6px; font-size: 0.85rem; color: var(--apple-blue);">
-                            <strong>{s.get('ruolo_topologico', '')}</strong>
-                        </div>
-                        <div style="margin-top: 6px; font-size: 0.85rem; color: #c9d1d9;">
-                            <strong>Cod. Fiscale / P.IVA:</strong> {s['cf_piva'] or 'Non indicato'}
-                        </div>
-                        <div style="margin-top: 4px; font-size: 0.82rem; color: #86868b;">
-                            <strong>Presente in {s['num_atti']} atti:</strong> {', '.join(s['atti'])}
-                        </div>
-                        <div style="margin-top: 6px; font-size: 0.80rem; color: #38bdf8;">
-                            <strong>Legami:</strong> {s['in_entrata']} flussi in entrata | {s['in_uscita']} in uscita
-                        </div>
+        st.markdown(f"#### 🌟 Snodi Chiave e Soggetti Ricorrenti ({len(snodi)} soggetti)")
+        col_s1, col_s2 = st.columns(2)
+        for idx, s in enumerate(snodi[:10]):
+            target_c = col_s1 if idx % 2 == 0 else col_s2
+            tipo = s.get("tipo", "ALTRO")
+            pill_c = "pill-blue" if tipo == "PERSONA" else ("pill-orange" if tipo == "SOCIETA" else "pill-green")
+            with target_c:
+                st.markdown(f"""
+                <div class="apple-card" style="border: 1px solid rgba(10, 132, 255, 0.35); padding: 14px 18px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; color: #58a6ff; font-size: 1.05rem;">{s['id']}</span>
+                        <span class="apple-pill {pill_c}">{tipo}</span>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div style="margin-top: 6px; font-size: 0.85rem; color: var(--apple-blue);">
+                        <strong>{s.get('ruolo_topologico', '')}</strong>
+                    </div>
+                    <div style="margin-top: 6px; font-size: 0.85rem; color: #c9d1d9;">
+                        <strong>Cod. Fiscale / P.IVA:</strong> {s['cf_piva'] or 'Non indicato'}
+                    </div>
+                    <div style="margin-top: 4px; font-size: 0.82rem; color: #86868b;">
+                        <strong>Presente in {s['num_atti']} atti:</strong> {', '.join(s['atti'])}
+                    </div>
+                    <div style="margin-top: 6px; font-size: 0.80rem; color: #38bdf8;">
+                        <strong>Legami:</strong> {s['in_entrata']} flussi in entrata | {s['in_uscita']} in uscita
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.markdown("---")
-
+        st.markdown("---")
         st.markdown(f"#### 📋 Registro Anagrafico Unificato ({len(st.session_state.gestore_grafo.grafo.nodes)} Soggetti Totali)")
         col_e1, col_e2 = st.columns(2)
         nodi_ordinati = sorted(st.session_state.gestore_grafo.grafo.nodes(data=True), key=lambda x: x[0])
@@ -899,8 +922,6 @@ with tab_convergenze:
 
         st.markdown("---")
         st.markdown("#### 🌐 Motore Dati FollowTheMoney (OCCRP) & Analytics DuckDB")
-        st.markdown("<p style='color: #86868b; font-size: 0.85rem;'>Dati strutturati conformi all'ontologia investigativa internazionale FollowTheMoney:</p>", unsafe_allow_html=True)
-
         ftm_stats = st.session_state.gestore_grafo.statistiche_ftm()
         schemi_ftm = ftm_stats.get("per_schema", {})
 
@@ -924,21 +945,3 @@ with tab_convergenze:
                     st.dataframe(pd.DataFrame(res_sql), use_container_width=True)
                 else:
                     st.info("Nessun record restituito dalla query.")
-
-# TAB 6: FASCICOLO ATTI ACQUISITI
-with tab_documenti:
-    if not st.session_state.documenti_acquisiti:
-        st.info("Nessun documento inserito nel fascicolo.")
-    else:
-        for nome_doc, info in st.session_state.documenti_acquisiti.items():
-            st.markdown(f"""
-            <div class="apple-card" style="padding: 14px 18px; margin-bottom: 10px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 700; color: #ffffff; font-size: 1rem;">📄 {nome_doc}</span>
-                    <span class="apple-pill pill-blue">{info.get('estensione', 'DOC').upper()}</span>
-                </div>
-                <div style="margin-top: 6px; font-size: 0.85rem; color: #86868b;">
-                    <strong>Dimensioni:</strong> {info.get('caratteri', 0):,} caratteri | <strong>Pagine:</strong> {info.get('pagine', 1)} | <strong>Blocchi:</strong> {info.get('num_blocchi', 1)}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)

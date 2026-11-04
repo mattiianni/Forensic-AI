@@ -440,6 +440,148 @@ class GestoreGrafo:
 
         return risultati
 
+    def _risolvi_nome_per_ricerca(self, testo: str) -> str:
+        """Risolve un nominativo o CF immesso dall'utente nel nodo effettivo del grafo."""
+        if not testo:
+            return ""
+        testo_pulito = testo.strip()
+        if self.grafo.has_node(testo_pulito):
+            return testo_pulito
+        if self.grafo.has_node(testo_pulito.upper()):
+            return testo_pulito.upper()
+
+        norm = self.normalizza_nome(testo_pulito)
+        if norm in self.mappa_identita:
+            return self.mappa_identita[norm]
+
+        # Cerca corrispondenza su CF/PIVA
+        for nodo, meta in self.dati_nodi.items():
+            if meta.get("cf_piva") and meta.get("cf_piva").upper() == testo_pulito.upper():
+                return nodo
+
+        # Corrispondenza parziale / inclusione token
+        up = testo_pulito.upper()
+        for nodo in self.grafo.nodes():
+            if up in nodo.upper() or nodo.upper() in up:
+                return nodo
+
+        parti_input = set(norm.split("_"))
+        for nodo in self.grafo.nodes():
+            parti_nodo = set(self.normalizza_nome(nodo).split("_"))
+            if parti_input and len(parti_input) >= 2 and parti_input.issubset(parti_nodo):
+                return nodo
+
+        return ""
+
+    def analizza_contatti(self, nome1: str, nome2: str) -> str:
+        """
+        Risolve deterministicamente il cammino minimo (shortest path) tra due soggetti
+        all'interno della rete relazionale accumulata, specificando nodi e archi intermedi.
+        """
+        n1 = self._risolvi_nome_per_ricerca(nome1)
+        n2 = self._risolvi_nome_per_ricerca(nome2)
+        if not n1 or not n2:
+            non_trovati = []
+            if not n1:
+                non_trovati.append(f"'{nome1}'")
+            if not n2:
+                non_trovati.append(f"'{nome2}'")
+            return f"Verifica non possibile: {', '.join(non_trovati)} non risultano censiti nel fascicolo."
+
+        try:
+            cammino = nx.shortest_path(self.grafo.to_undirected(), source=n1, target=n2)
+            etichette = [self.grafo.nodes[nodo].get("label", nodo) for nodo in cammino]
+            risultato = [f"COLLEGAMENTO DETERMINISTICO RILEVATO: {' ➔ '.join(etichette)} (Distanza: {len(cammino)-1} gradi di separazione)"]
+
+            for i in range(len(cammino) - 1):
+                u, v = cammino[i], cammino[i + 1]
+                data_uv = self.grafo.get_edge_data(u, v) or {}
+                data_vu = self.grafo.get_edge_data(v, u) or {}
+
+                dettagli_archi = []
+                for _, e_data in data_uv.items():
+                    val = e_data.get("valore_numerico", 0)
+                    val_str = f" [€ {val:,.2f}]" if val else ""
+                    fnt = e_data.get("fonte", "N/D")
+                    lbl = e_data.get("label", "LEGAME")
+                    det = e_data.get("dettagli", "")
+                    dettagli_archi.append(f"{u} ➔ {lbl}{val_str} ➔ {v} ({det} | Fonte: {fnt})")
+
+                for _, e_data in data_vu.items():
+                    val = e_data.get("valore_numerico", 0)
+                    val_str = f" [€ {val:,.2f}]" if val else ""
+                    fnt = e_data.get("fonte", "N/D")
+                    lbl = e_data.get("label", "LEGAME")
+                    det = e_data.get("dettagli", "")
+                    dettagli_archi.append(f"{v} ➔ {lbl}{val_str} ➔ {u} ({det} | Fonte: {fnt})")
+
+                info_arco = "; ".join(dettagli_archi) if dettagli_archi else "Legame registrato"
+                risultato.append(f"- Connessione tra '{u}' e '{v}': {info_arco}")
+
+            return "\n".join(risultato)
+        except nx.NetworkXNoPath:
+            return f"Nessun contatto o collegamento (diretto o indiretto) riscontrato tra '{nome1}' e '{nome2}' negli atti analizzati."
+        except Exception as e:
+            return f"Errore durante l'analisi del cammino minimo: {e}"
+
+    def calcola_partecipazioni(self, soggetto: str) -> str:
+        """
+        Calcola deterministicamente quote, partecipazioni, cariche sociali e legami
+        in entrata e in uscita per il soggetto specificato.
+        """
+        s_id = self._risolvi_nome_per_ricerca(soggetto)
+        if not s_id:
+            return f"Soggetto '{soggetto}' non censito nel fascicolo."
+
+        meta = self.dati_nodi.get(s_id, {})
+        cf = meta.get("cf_piva", "N/D")
+        tipo = meta.get("tipo", "ALTRO")
+
+        risultato = [f"PARTECIPAZIONI, CARICHE E OPERAZIONI RILEVATE PER: {s_id} (Tipo: {tipo}, CF/PIVA: {cf}):"]
+        trovato = False
+
+        for _, dest, data in self.grafo.out_edges(s_id, data=True):
+            tipo_rel = data.get("label", "LEGAME")
+            dettagli = data.get("dettagli", "")
+            valore = data.get("valore_numerico", 0)
+            val_str = f" [€ {valore:,.2f}]" if valore else ""
+            fonte = data.get("fonte", "N/D")
+            azienda = self.grafo.nodes[dest].get("label", dest)
+            risultato.append(f"- Incarico/Flusso: {tipo_rel} verso '{azienda}'{val_str} | Dettagli: {dettagli} (Fonte: {fonte})")
+            trovato = True
+
+        for src, _, data in self.grafo.in_edges(s_id, data=True):
+            tipo_rel = data.get("label", "LEGAME")
+            dettagli = data.get("dettagli", "")
+            valore = data.get("valore_numerico", 0)
+            val_str = f" [€ {valore:,.2f}]" if valore else ""
+            fonte = data.get("fonte", "N/D")
+            azienda = self.grafo.nodes[src].get("label", src)
+            risultato.append(f"- Ricevuto da '{azienda}' come {tipo_rel}{val_str} | Dettagli: {dettagli} (Fonte: {fonte})")
+            trovato = True
+
+        return "\n".join(risultato) if trovato else f"Nessuna quota, incarico o transazione associata direttamente a '{soggetto}'."
+
+    def ottieni_riassunto(self) -> str:
+        """
+        Genera un riassunto testuale sintetico e deterministico di tutte le relazioni censite nel grafo.
+        """
+        if len(self.grafo.edges) == 0:
+            return "Nessuna relazione registrata nella rete."
+
+        linee = ["--- RELAZIONI E RAPPORTI REGISTRATI NELLA RETE ---"]
+        for u, v, data in self.grafo.edges(data=True):
+            lu = self.grafo.nodes[u].get("label", u)
+            lv = self.grafo.nodes[v].get("label", v)
+            lbl = data.get("label", "LEGAME")
+            det = data.get("dettagli", "")
+            val = data.get("valore_numerico", 0)
+            val_str = f" (€ {val:,.2f})" if val else ""
+            fnt = data.get("fonte", "N/D")
+            linee.append(f"{lu} ➔ [{lbl}{val_str}: {det}] ➔ {lv} (Fonte: {fnt})")
+
+        return "\n".join(linee)
+
     def trova_convergenze_e_snodi(self) -> list[dict]:
         if len(self.grafo.nodes) == 0:
             return []
