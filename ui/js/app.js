@@ -425,7 +425,9 @@ const FT = {
       if (r.jobs.length) {
         act.classList.remove('hidden');
         const j = r.jobs[0];
-        $('#activity-txt').textContent = r.jobs.length > 1 ? `${r.jobs.length} attività in corso` : `${j.label} · ${pct(j.progress)}`;
+        const full = r.jobs.length > 1 ? `${r.jobs.length} attività in corso` : `${j.label} · ${pct(j.progress)}`;
+        $('#activity-txt').textContent = r.jobs.length > 1 ? `${r.jobs.length} attività` : pct(j.progress);
+        act.title = `${full} — clic per i dettagli`;
       } else act.classList.add('hidden');
       if (r.jobs.some(j => j.kind === 'ingest' || j.kind === 'index' || j.kind === 'pdf')) this.refreshDocs();
       this.renderSidebarJobs(r.jobs.filter(j => j.kind === 'ingest' || j.kind === 'index'));
