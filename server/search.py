@@ -4,6 +4,7 @@ e risposte del modello locale vincolate ai soli documenti del fascicolo, con cit
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 import threading
@@ -16,6 +17,7 @@ from server import jobs, runtime, store
 CHUNK_CHARS = 1100
 CHUNK_OVERLAP = 180
 EMBED_BATCH = 24
+SOGLIA_SIM = 0.12      # distanza massima (coseno) dal passaggio più pertinente
 
 _cache: dict[str, tuple[float, np.ndarray, list[int]]] = {}
 _cache_lock = threading.Lock()
@@ -150,27 +152,101 @@ dagli dalle nel nello nella nei negli nelle sul sullo sulla sui sugli sulle è s
 anche questo questa quello quella essere stato stata documento documenti fascicolo dimmi trova cerca elenca""".split())
 
 
+def _stem(t: str) -> str | None:
+    """Radice grezza per l'italiano: «acquisito» → acquis* trova acquisizione, acquisto, acquisire…"""
+    if len(t) < 6 or re.search(r"\d", t):
+        return None
+    return t[:max(5, len(t) - 3)]
+
+
 def _fts_query(q: str) -> str:
     tokens = [t for t in re.findall(r"[\wÀ-ÿ'.\-/]+", q.lower()) if len(t) > 1 and t not in _STOP]
-    terms = []
-    for t in tokens[:24]:
+    terms: list[str] = []
+    for t in tokens[:40]:
         t = t.strip(".-/'")
-        if t:
-            terms.append('"' + t.replace('"', "") + '"')
+        if not t:
+            continue
+        for term in ('"' + t.replace('"', "") + '"', (f'"{_stem(t)}"*' if _stem(t) else None)):
+            if term and term not in terms:
+                terms.append(term)
     return " OR ".join(terms)
 
 
-def search(fid: str, query: str, k: int = 8, doc_ids: list[str] | None = None, per_doc: int = 3) -> list[dict]:
+_vocab_cache: dict[str, tuple[float, set, dict]] = {}
+
+
+def _vocab(fid: str, con) -> tuple[set, dict]:
+    """Parole presenti nell'indice (per correggere nomi scritti male: «mannelli» → «manelli»)."""
+    path = store.fdir(fid) / "index.sqlite"
+    mtime = path.stat().st_mtime if path.exists() else 0
+    hit = _vocab_cache.get(fid)
+    if hit and hit[0] == mtime:
+        return hit[1], hit[2]
+    con.execute("CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vocab USING fts5vocab(chunks_fts, 'row')")
+    words = {t for (t,) in con.execute("SELECT term FROM chunks_vocab WHERE length(term) >= 4")}
+    by_len: dict[int, list[str]] = {}
+    for w in words:
+        if not re.search(r"\d", w):
+            by_len.setdefault(len(w), []).append(w)
+    _vocab_cache[fid] = (mtime, words, by_len)
+    return words, by_len
+
+
+def correggi(fid: str, testo: str) -> dict[str, str]:
+    """Parole della domanda assenti dai documenti → parola dei documenti più simile (errori di battitura)."""
+    import difflib
+    import unicodedata
+    con = _db(fid)
+    try:
+        words, by_len = _vocab(fid, con)
+    finally:
+        con.close()
+    out = {}
+    for t in re.findall(r"[\wÀ-ÿ]+", testo.lower()):
+        if len(t) < 5 or t in _STOP or re.search(r"\d", t):
+            continue
+        norm = "".join(c for c in unicodedata.normalize("NFD", t) if unicodedata.category(c) != "Mn")
+        if norm in words or t in words:
+            continue
+        cand = [w for L in range(len(norm) - 2, len(norm) + 3) for w in by_len.get(L, [])]
+        m = difflib.get_close_matches(norm, cand, n=1, cutoff=0.8)
+        if m:
+            out[t] = m[0]
+    return out
+
+
+def _unisci(a: str, b: str) -> str:
+    """Unisce due passaggi consecutivi della stessa pagina togliendo la sovrapposizione."""
+    for n in range(min(len(a), len(b), CHUNK_OVERLAP + 120), 15, -1):
+        if a.endswith(b[:n]):
+            return a + b[n:]
+    return a + "\n" + b
+
+
+def search(fid: str, query: str, k: int = 10, doc_ids: list[str] | None = None, per_doc: int = 5,
+           termini: list[str] | None = None, min_k: int = 3) -> list[dict]:
+    """
+    Ricerca ibrida: parole (FTS5, anche per radice) + significato (embedding), fuse con RRF.
+    Il numero di passaggi è variabile: si tengono solo quelli davvero vicini al migliore,
+    e i passaggi consecutivi della stessa pagina vengono uniti in uno solo.
+    """
     con = _db(fid)
     scores: dict[int, float] = {}
+    fts_rank: dict[int, int] = {}
+    sims_by_id: dict[int, float] = {}
     RRF = 60.0
 
-    fq = _fts_query(query)
+    # nomi scritti male: aggiungo la forma presente nei documenti
+    corr = correggi(fid, query + " " + " ".join(termini or []))
+    # (le forme corrette si aggiungono, non sostituiscono: «soldi» non deve diventare «soli»)
+    query_sem = query + (" " + " ".join(corr.values()) if corr else "")
+    fq = _fts_query(query_sem + " " + " ".join(termini or []) + " " + " ".join(corr.values()))
     if fq:
         try:
             rows = con.execute(
-                "SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT 60", (fq,)).fetchall()
+                "SELECT rowid FROM chunks_fts WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT 80", (fq,)).fetchall()
             for rank, (cid,) in enumerate(rows):
+                fts_rank[cid] = rank
                 scores[cid] = scores.get(cid, 0) + 1.0 / (RRF + rank)
         except sqlite3.OperationalError:
             pass
@@ -178,55 +254,120 @@ def search(fid: str, query: str, k: int = 8, doc_ids: list[str] | None = None, p
     mat, ids = _matrix(fid, con)
     if len(ids) and embed_available():
         try:
-            qv = _embed([query], query=True)[0]
+            qv = _embed([query_sem], query=True)[0]
             sims = mat @ qv
-            top = np.argsort(-sims)[:60]
+            sims_by_id = {ids[i]: float(sims[i]) for i in range(len(ids))}
+            top = np.argsort(-sims)[:80]
             for rank, idx in enumerate(top):
                 cid = ids[int(idx)]
-                scores[cid] = scores.get(cid, 0) + 1.0 / (RRF + rank)
+                scores[cid] = scores.get(cid, 0) + 1.2 / (RRF + rank)   # il significato pesa un po' di più
         except Exception:
             pass
 
     ordered = sorted(scores.items(), key=lambda kv: -kv[1])
+    best_sim = max((sims_by_id.get(c, 0.0) for c, _ in ordered[:10]), default=0.0)
     docs = {d["id"]: d for d in store.list_docs(fid)}
-    out, count = [], {}
+    out: list[dict] = []
+    count: dict[str, int] = {}
     for cid, sc in ordered:
+        if len(out) >= k:
+            break
         row = con.execute("SELECT doc_id, page, label, text FROM chunks WHERE id=?", (cid,)).fetchone()
         if not row:
             continue
         doc_id, page, label, text = row
         if doc_ids and doc_id not in doc_ids:
             continue
-        if doc_id not in docs or count.get(doc_id, 0) >= per_doc:
+        if doc_id not in docs:
+            continue
+        # soglia di pertinenza: oltre i primi min_k, solo passaggi vicini al migliore o forti per parole chiave
+        if len(out) >= min_k and sims_by_id:
+            sim = sims_by_id.get(cid, 0.0)
+            if sim < best_sim - SOGLIA_SIM and fts_rank.get(cid, 999) > 4:
+                continue
+        # passaggio consecutivo di uno già scelto (stessa pagina): unisci invece di sprecare un posto
+        vicino = next((f for f in out if f["doc_id"] == doc_id and f["pagina"] == page
+                       and (cid - 1 in f["_ids"] or cid + 1 in f["_ids"]) and len(f["_ids"]) < 3), None)
+        if vicino:
+            if cid > max(vicino["_ids"]):
+                vicino["testo"] = _unisci(vicino["testo"], text)
+            else:
+                vicino["testo"] = _unisci(text, vicino["testo"])
+            vicino["_ids"].append(cid)
+            continue
+        if count.get(doc_id, 0) >= per_doc:
             continue
         count[doc_id] = count.get(doc_id, 0) + 1
-        out.append({"chunk_id": cid, "doc_id": doc_id, "documento": docs[doc_id]["nome"], "pagina": page,
+        out.append({"chunk_id": cid, "_ids": [cid], "doc_id": doc_id, "documento": docs[doc_id]["nome"], "pagina": page,
                     "label": label or f"Pag. {page}", "testo": text, "score": round(sc, 5),
+                    "pertinenza": round(sims_by_id.get(cid, 0.0), 3),
                     "ha_pdf": bool(docs[doc_id].get("pdf"))})
-        if len(out) >= k:
-            break
     con.close()
+    for f in out:
+        f.pop("_ids", None)
     return out
 
 
 # ── Risposta con citazioni ────────────────────────────────────────────────────
 
-SYSTEM = """Sei un motore di ricerca documentale. Il tuo unico compito è trovare e riportare informazioni
-contenute nei PASSAGGI forniti, estratti dai documenti caricati dall'utente.
+SYSTEM = """Sei un motore di ricerca documentale. Il tuo unico compito è rispondere alla DOMANDA usando
+SOLO i PASSAGGI forniti, estratti dai documenti caricati dall'utente.
 
-Regole vincolanti:
-1. Riporta SOLO ciò che è scritto nei passaggi. Nessuna conoscenza esterna, nessuna supposizione.
-2. Niente analisi, deduzioni, ipotesi, valutazioni, commenti investigativi, consigli o conclusioni:
-   solo i fatti richiesti (nomi, date, importi, ruoli, indirizzi, codici, eventi) esattamente come risultano.
-3. Incrocia i documenti: se l'informazione compare in più documenti, riportala da ciascuno;
-   se i documenti riportano dati diversi sullo stesso punto, indica entrambi i valori con le rispettive fonti.
-4. Dopo OGNI dato riportato indica il numero del passaggio da cui proviene tra parentesi quadre,
-   es. [1] oppure [2][4]. Ogni frase con un dato deve avere il suo riferimento.
-5. Se l'informazione non è presente, rispondi soltanto:
-   "Nei documenti caricati non risulta …" e nient'altro.
-6. Risposta in italiano, testo semplice, breve e preciso: frasi dirette o un elenco puntato.
-   Niente titoli, introduzioni, riepiloghi finali o formule di cortesia.
+Come lavori:
+1. Leggi TUTTI i passaggi prima di rispondere e individua quelli che riguardano davvero i soggetti e il fatto chiesti.
+2. Rispondi esattamente a ciò che è chiesto. Se la domanda chiede «quando», la risposta inizia con la data.
+3. Se il fatto non è descritto con le stesse parole della domanda, riporta i fatti dei passaggi che vi rispondono
+   (es. per «quando X ha acquisito Y»: costituzione, conferimenti, cessioni o trasferimenti di quote, data da cui
+   X risulta socio), in ordine cronologico, e precisa che un atto con quel nome non risulta.
+4. Ogni data, importo, nome o codice va copiato esattamente dal passaggio in cui è riferito a QUEL fatto:
+   non attribuire mai una data o un importo a un fatto diverso da quello a cui il passaggio lo collega.
+5. Nessuna conoscenza esterna, supposizione, analisi, valutazione, consiglio o conclusione: solo fatti.
+6. Incrocia i documenti: se il dato compare in più passaggi riportalo con tutte le fonti; se i documenti
+   riportano valori diversi sullo stesso punto, indica entrambi con le rispettive fonti.
+7. Dopo OGNI dato indica tra parentesi quadre il numero del passaggio da cui proviene, es. [1] oppure [2][4].
+8. Le risposte precedenti della conversazione possono essere sbagliate o incomplete: verifica sempre sui passaggi
+   e, se l'utente corregge o precisa la domanda, rispondi alla domanda precisata.
+9. Se nessun passaggio contiene l'informazione, rispondi soltanto: "Nei documenti caricati non risulta …".
+10. Italiano, testo semplice, breve e preciso: frasi dirette o elenco puntato. Niente titoli, introduzioni,
+    riepiloghi o formule di cortesia.
 """
+
+RIFORMULA = """Ricevi una conversazione e l'ultima domanda dell'utente su un fascicolo di documenti.
+1. Riscrivi l'ultima domanda come domanda autonoma e completa: sostituisci pronomi e riferimenti impliciti
+   («l'ha», «lei», «quella società», «e invece…») con i nomi a cui si riferiscono nella conversazione,
+   e tieni conto delle correzioni dell'utente («non ti ho chiesto X, ti ho chiesto Y» → la domanda è Y).
+2. Elenca da 3 a 8 termini di ricerca: nomi propri, sigle, codici, e i termini giuridico-amministrativi
+   con cui il fatto può essere scritto negli atti (es. acquisizione → cessione di quote, trasferimento di
+   partecipazioni, conferimento, socio unico; presidente → presidente del consiglio di amministrazione).
+Rispondi SOLO con JSON: {"domanda": "...", "termini": ["...", "..."]}"""
+
+
+def _senza_citazioni(t: str) -> str:
+    return re.sub(r"\s*\((?:File [^()]*)\)", "", t or "").strip()
+
+
+def riformula(storia: list[dict], domanda: str, model: str) -> tuple[str, list[str]]:
+    """Domanda autonoma + termini di ricerca (risolve i riferimenti alle domande precedenti)."""
+    turni = []
+    for m in storia[-6:]:
+        chi = "Utente" if m["role"] == "user" else "Risposta"
+        turni.append(f"{chi}: {_senza_citazioni(m['content'])[:500]}")
+    prompt = ("CONVERSAZIONE:\n" + ("\n".join(turni) if turni else "(nessuna)") +
+              f"\n\nULTIMA DOMANDA: {domanda}")
+    try:
+        r = runtime.client().chat(model=model, format="json", stream=False,
+                                  messages=[{"role": "system", "content": RIFORMULA}, {"role": "user", "content": prompt}],
+                                  options={"temperature": 0.0, "num_ctx": 4096, "num_predict": 220})
+        msg = getattr(r, "message", None) or r["message"]
+        data = json.loads(getattr(msg, "content", None) if not isinstance(msg, dict) else msg["content"])
+        q = str(data.get("domanda") or "").strip() or domanda
+        termini = [str(t).strip() for t in (data.get("termini") or []) if str(t).strip()][:10]
+        return q, termini
+    except Exception:
+        precedenti = [m["content"] for m in storia if m["role"] == "user"]
+        if precedenti and len(domanda.split()) < 7:
+            return precedenti[-1] + " " + domanda, []
+        return domanda, []
 
 
 def riferimento(f: dict) -> str:
@@ -271,18 +412,17 @@ def clear_history(fid: str):
 def answer_job(job_id: str, fid: str, domanda: str, model: str, doc_ids: list[str] | None):
     t0 = time.time()
     storia = _history(fid)
-    jobs.progress(job_id, 0.05, "Cerco nei documenti…")
+    jobs.progress(job_id, 0.04, "Interpreto la domanda…")
+    query, termini = riformula(storia, domanda, model)
+    if jobs.is_cancelled(job_id):
+        return
+    corr = correggi(fid, query + " " + domanda)   # «mannelli» → «manelli»
 
-    # Domanda di ricerca: per le domande brevi di continuazione aggiungo la precedente
-    query = domanda
-    precedenti = [m["content"] for m in storia if m["role"] == "user"]
-    if precedenti and len(domanda.split()) < 7:
-        query = precedenti[-1] + " " + domanda
-
-    budget_chars = int((runtime.context_budget(model) - 2200) * 2.6)
-    k = max(4, min(12, budget_chars // (CHUNK_CHARS + 120)))
-    fonti = search(fid, query, k=k, doc_ids=doc_ids)
-    jobs.emit(job_id, {"type": "sources", "sources": fonti})
+    jobs.progress(job_id, 0.12, "Cerco nei documenti…")
+    budget_chars = int((runtime.context_budget(model) - 2600) * 2.6)
+    k = max(4, min(10, budget_chars // (CHUNK_CHARS * 2)))
+    fonti = search(fid, query, k=k, doc_ids=doc_ids, termini=termini)
+    jobs.emit(job_id, {"type": "sources", "sources": fonti, "query": query})
 
     if not fonti:
         testo = ("Nei documenti caricati non ho trovato passaggi pertinenti a questa domanda. "
@@ -297,12 +437,20 @@ def answer_job(job_id: str, fid: str, domanda: str, model: str, doc_ids: list[st
         blocchi.append(f"[{i}] Documento: «{f['documento']}» — {f['label']}\n{f['testo']}")
     contesto = "\n\n".join(blocchi)
 
-    messages = [{"role": "system", "content": SYSTEM}]
+    turni = []
     for m in storia[-4:]:
-        messages.append({"role": m["role"], "content": m["content"]})
-    messages.append({"role": "user", "content": f"PASSAGGI DAI DOCUMENTI:\n\n{contesto}\n\nDOMANDA: {domanda}"})
+        chi = "Utente" if m["role"] == "user" else "Risposta precedente"
+        turni.append(f"{chi}: {_senza_citazioni(m['content'])[:600]}")
+    conv = ("CONVERSAZIONE PRECEDENTE (solo per capire la domanda; può contenere errori):\n" + "\n".join(turni) + "\n\n") if turni else ""
+    precisata = f"\n(Domanda completa: {query})" if query.strip().lower() != domanda.strip().lower() else ""
+    if corr:
+        precisata += ("\n(Parole della domanda che nei documenti potrebbero essere scritte così: "
+                      + ", ".join(f"{a} → {b}" for a, b in corr.items()) + ")")
 
-    jobs.progress(job_id, 0.2, f"Il modello legge {len(fonti)} passaggi…")
+    messages = [{"role": "system", "content": SYSTEM},
+                {"role": "user", "content": f"{conv}PASSAGGI DAI DOCUMENTI:\n\n{contesto}\n\nDOMANDA: {domanda}{precisata}"}]
+
+    jobs.progress(job_id, 0.2, f"Il modello legge {len(fonti)} passaggi pertinenti…")
     opts = {"temperature": 0.0, "num_ctx": runtime.context_budget(model), "num_predict": 1200}
     threads = runtime.cpu_threads()
     if threads:

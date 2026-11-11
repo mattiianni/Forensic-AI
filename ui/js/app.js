@@ -80,6 +80,13 @@ const FT = {
     $$('.area-tab').forEach(b => b.addEventListener('click', () => this.setArea(b.dataset.area)));
     $('#btn-sidebar').addEventListener('click', () => this.toggleSidebar());
     this.initSidebarResize();
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-copy-q]');
+      if (!b) return;
+      const bubble = b.closest('.msg')?.querySelector('.bubble');
+      if (bubble) this.copy(bubble.textContent, 'Domanda', false);
+      const ic = b.querySelector('.ms'); if (ic) { ic.textContent = 'check'; setTimeout(() => ic.textContent = 'content_copy', 1400); }
+    });
     $('#btn-fascicolo').addEventListener('click', (e) => this.fascicoloMenu(e.currentTarget));
     $('#btn-model').addEventListener('click', (e) => this.modelMenu(e.currentTarget));
     $('#btn-settings').addEventListener('click', (e) => this.settingsMenu(e.currentTarget));
@@ -598,6 +605,33 @@ const FT = {
     t.innerHTML = `${icon(ic, colors[ic] || 'st-work')}<span>${esc(text)}</span>`;
     $('#toasts').appendChild(t);
     setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, ms);
+  },
+
+  // ── Copia negli appunti (testo semplice + formattato, per incollare in Word/Pages/Mail) ──
+  plain(text) {
+    return String(text || '')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1')
+      .replace(/(^|[^*])\*(?!\s)(.+?)\*/g, '$1$2')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^\s*[-*]\s+/gm, '• ')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  },
+  async copy(text, what = 'Testo', markdown = true) {
+    const plain = markdown ? this.plain(text) : String(text || '').trim();
+    try {
+      if (markdown && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+          'text/html': new Blob([this.md(text)], { type: 'text/html' }),
+        })]);
+      } else await navigator.clipboard.writeText(plain);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = plain; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    this.toast(`${what} copiat${what.endsWith('a') ? 'a' : 'o'} negli appunti`, 'content_copy', 1800);
   },
 
   // ── Markdown sicuro ─────────────────────────────────────────────────────

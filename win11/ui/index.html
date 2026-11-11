@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forensic Tools</title>
+  <link rel="stylesheet" href="/ui/css/app.css" />
+  <link rel="stylesheet" href="/ui/css/areas.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ══ TOOLBAR ═══════════════════════════════════════════════════════════ -->
+  <header class="toolbar drag" id="toolbar">
+    <div class="toolbar-left drag">
+      <button class="icon-btn" id="btn-sidebar" title="Mostra/nascondi fascicolo (Ctrl+Maiusc+S)"><span class="ms">left_panel_close</span></button>
+      <div class="brand drag">
+        <span class="brand-name">Forensic Tools</span>
+      </div>
+    </div>
+
+    <nav class="areas" role="tablist">
+      <button class="area-tab" data-area="pdf" role="tab" title="Ctrl+1">
+        <span class="area-ico"><span class="ms">picture_as_pdf</span></span>
+        <span><span class="area-title">PDF</span><span class="area-sub">Converti · OCR · riduci · esporta</span></span>
+      </button>
+      <button class="area-tab" data-area="ricerca" role="tab" title="Ctrl+2">
+        <span class="area-ico"><span class="ms">manage_search</span></span>
+        <span><span class="area-title">Ricerca</span><span class="area-sub">Risposte precise dai documenti</span></span>
+      </button>
+      <button class="area-tab" data-area="forensic" role="tab" title="Ctrl+3">
+        <span class="area-ico"><span class="ms">hub</span></span>
+        <span><span class="area-title">Forensic AI</span><span class="area-sub">Analisi investigativa</span></span>
+      </button>
+    </nav>
+
+    <div class="toolbar-right drag">
+      <button class="activity hidden" id="activity" title="Attività in corso"><span class="spinner"></span><span class="txt" id="activity-txt"></span></button>
+      <button class="model-btn" id="btn-model" title="Modello IA"><span class="ms sm">memory</span><span id="model-label">—</span><span class="ms xs">expand_more</span></button>
+      <button class="icon-btn" id="btn-settings" title="Impostazioni"><span class="ms">tune</span></button>
+    </div>
+  </header>
+
+  <div class="body" id="body">
+
+    <!-- ══ SIDEBAR FASCICOLO ═══════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar" data-drop="fascicolo">
+      <div class="sb-head">
+        <div class="sb-section-title">Fascicolo</div>
+        <button class="fascicolo-switch" id="btn-fascicolo">
+          <span class="f-ico"><span class="ms fill">folder_open</span></span>
+          <span class="f-text"><div class="f-name" id="f-name">—</div><div class="f-meta" id="f-meta"></div></span>
+          <span class="ms sm faint">unfold_more</span>
+        </button>
+      </div>
+      <div class="sb-actions">
+        <button class="btn" id="btn-add-files"><span class="ms">note_add</span>File</button>
+        <button class="btn" id="btn-add-folder"><span class="ms">create_new_folder</span>Cartella</button>
+      </div>
+      <div id="sb-jobs" class="sb-jobs"></div>
+      <div class="doc-list" id="doc-list"></div>
+      <div class="sb-foot" id="sb-foot"></div>
+      <div class="sb-resizer" id="sb-resizer" title="Trascina per ridimensionare · doppio clic per ripristinare"></div>
+    </aside>
+
+    <main class="main">
+
+      <!-- ══ AREA PDF (Pdf50) ═════════════════════════════════════════════ -->
+      <section class="area" id="area-pdf">
+        <div class="scroll">
+          <div class="page">
+            <div class="page-head">
+              <div>
+                <h2>PDF</h2>
+                <p>Converti un'intera cartella in PDF con OCR italiano, uniscilo e dividilo automaticamente oltre i 50 MB.</p>
+              </div>
+            </div>
+
+            <div id="deps-warning" class="hidden"></div>
+
+            <!-- SETUP -->
+            <section id="setup-card" class="card">
+              <div id="drop-zone" class="drop-zone" data-drop="pdf">
+                <div class="dz-ico c-red"><span class="ms xl">upload_file</span></div>
+                <div id="drop-title" class="dz-title">Trascina qui una cartella o un file PDF</div>
+                <div id="drop-sub" class="dz-sub">oppure fai clic per scegliere una cartella</div>
+                <div id="drop-status" class="dz-sub hidden" style="color:var(--accent);font-weight:500"></div>
+              </div>
+
+              <div id="source-info" class="source-info hidden">
+                <div class="si-ico c-blue" id="source-icon-wrap"><span class="ms lg" id="source-icon">folder</span></div>
+                <div class="si-text">
+                  <div id="source-path-display" class="si-path"></div>
+                  <div id="source-count" class="si-count"></div>
+                </div>
+                <button class="btn" id="btn-change-source"><span class="ms">swap_horiz</span>Cambia</button>
+              </div>
+
+              <!-- Modalità output -->
+              <div id="mode-section">
+                <div class="group-label" style="margin-top:20px">Il PDF di destinazione dovrà essere</div>
+                <div class="choice-grid">
+                  <label class="choice">
+                    <input type="radio" name="mode" value="unified" id="mode-unified" checked />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">description</span></div>
+                      <div><strong>Unico</strong><span class="cc-sub">Tutte le sottocartelle in un solo PDF</span></div></div>
+                  </label>
+                  <label class="choice">
+                    <input type="radio" name="mode" value="per_folder" id="mode-perfolder" />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">folder_copy</span></div>
+                      <div><strong>Suddiviso</strong><span class="cc-sub">Un PDF per ogni sottocartella</span></div></div>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Operazioni PDF (modalità PDF diretta) -->
+              <div id="pdf-ops-panel" class="hidden">
+                <div class="group-label" style="margin-top:20px">Operazione da eseguire</div>
+                <div class="choice-grid">
+                  <label class="choice"><input type="radio" name="pdfop" value="compress" checked />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">compress</span></div>
+                      <div><strong>Comprimi</strong><span class="cc-sub">Riduci la dimensione con Ghostscript</span></div></div></label>
+                  <label class="choice"><input type="radio" name="pdfop" value="split-size" />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">splitscreen_vertical_add</span></div>
+                      <div><strong>Dividi per dimensione</strong><span class="cc-sub">Parti da 15 / 30 / 50 MB</span></div></div></label>
+                  <label class="choice"><input type="radio" name="pdfop" value="split-ranges" />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">format_list_numbered</span></div>
+                      <div><strong>Dividi per range</strong><span class="cc-sub">Scegli le pagine di ogni parte</span></div></div></label>
+                  <label class="choice"><input type="radio" name="pdfop" value="compress+split" />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">auto_awesome_motion</span></div>
+                      <div><strong>Comprimi + Dividi</strong><span class="cc-sub">Prima comprime, poi divide per dimensione</span></div></div></label>
+                  <label class="choice full"><input type="radio" name="pdfop" value="extract-text" />
+                    <div class="choice-card"><div class="cc-ico"><span class="ms">notes</span></div>
+                      <div><strong>Estrai testo</strong><span class="cc-sub">Salva solo il testo in un file .txt — file leggerissimo</span></div></div></label>
+                </div>
+
+                <div id="pdfopts-compress" class="op-sub">
+                  <div class="group-label">Qualità immagini</div>
+                  <div class="radio-list">
+                    <label class="radio-line"><input type="radio" name="quality" value="screen"/><span><strong>Screen</strong> — 72 DPI · massimo risparmio</span></label>
+                    <label class="radio-line"><input type="radio" name="quality" value="ebook" checked/><span><strong>Ebook</strong> — 150 DPI · bilanciato <span class="badge-rec">consigliato</span></span></label>
+                    <label class="radio-line"><input type="radio" name="quality" value="printer"/><span><strong>Printer</strong> — 300 DPI · alta qualità</span></label>
+                  </div>
+                </div>
+
+                <div id="pdfopts-split-size" class="op-sub hidden">
+                  <div class="group-label">Dimensione massima per parte</div>
+                  <div class="radio-list">
+                    <label class="radio-line"><input type="radio" name="split-mb" value="15"/><span>15 MB</span></label>
+                    <label class="radio-line"><input type="radio" name="split-mb" value="30"/><span>30 MB</span></label>
+                    <label class="radio-line"><input type="radio" name="split-mb" value="50" checked/><span>50 MB <span class="badge-rec">consigliato</span></span></label>
+                    <label class="radio-line"><input type="radio" name="split-mb" value="custom" id="split-mb-custom"/><span>Personalizzata:
+                      <input type="number" id="custom-mb" value="50" min="1" max="999" class="input num" onfocus="document.getElementById('split-mb-custom').checked=true"/> MB</span></label>
+                  </div>
+                  <div class="group-label">Rinomina i file suddivisi</div>
+                  <div class="radio-list">
+                    <label class="radio-line"><input type="radio" name="naming-ss" value="x_of_y" checked/><span>Parte X di Y <em>es. Contratto_Parte 1 di 3.pdf</em></span></label>
+                    <label class="radio-line"><input type="radio" name="naming-ss" value="x"/><span>Parte X <em>es. Contratto_Parte 1.pdf</em></span></label>
+                    <label class="radio-line"><input type="radio" name="naming-ss" value="custom"/><span>Personalizzata:
+                      <input type="text" id="custom-naming-ss" class="input" placeholder="es. Fascicolo" oninput="document.querySelector('input[name=naming-ss][value=custom]').checked=true"/></span></label>
+                  </div>
+                </div>
+
+                <div id="pdfopts-split-ranges" class="op-sub hidden">
+                  <div class="group-label">Range di pagine <span id="range-total-label" class="faint"></span></div>
+                  <div id="ranges-list"></div>
+                  <button class="btn" onclick="PDF.addRangeRow('ranges-list')"><span class="ms">add</span>Aggiungi parte</button>
+                  <div class="group-label">Rinomina i file suddivisi</div>
+                  <div class="radio-list">
+                    <label class="radio-line"><input type="radio" name="naming-sr" value="x_of_y" checked/><span>Parte X di Y <em>es. Contratto_Parte 1 di 3_pag1-80.pdf</em></span></label>
+                    <label class="radio-line"><input type="radio" name="naming-sr" value="x"/><span>Parte X <em>es. Contratto_Parte 1_pag1-80.pdf</em></span></label>
+                    <label class="radio-line"><input type="radio" name="naming-sr" value="custom"/><span>Personalizzata:
+                      <input type="text" id="custom-naming-sr" class="input" placeholder="es. Sezione" oninput="document.querySelector('input[name=naming-sr][value=custom]').checked=true"/></span></label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="group-label" style="margin-top:20px">Cartella di destinazione</div>
+              <div class="folder-row">
+                <span class="ms faint">folder</span>
+                <span id="output-path-display" class="fr-path">Nessuna cartella selezionata</span>
+                <button class="btn" id="btn-output"><span class="ms">folder_open</span>Sfoglia</button>
+              </div>
+
+              <div class="start-row" style="margin-bottom:-8px">
+                <label class="check-row grow" id="ocr-row" title="Rende ricercabile il testo delle scansioni: consigliato, semplifica il lavoro del modello offline in Ricerca e Forensic AI">
+                  <span class="switch"><input type="checkbox" id="apply-ocr" checked><span></span></span>
+                  <span>Applica OCR italiano <span class="badge-rec">consigliato</span> <span class="faint" style="font-size:12px">· spento: i documenti vengono uniti così come sono</span></span>
+                </label>
+              </div>
+              <div class="start-row">
+                <label class="check-row grow" id="add-fascicolo-row" title="I file convertiti e passati all'OCR vengono aggiunti al fascicolo, pronti per Ricerca e Forensic AI">
+                  <span class="switch"><input type="checkbox" id="add-to-fascicolo" checked><span></span></span>
+                  <span>Aggiungi i documenti anche al fascicolo <strong id="add-fascicolo-name"></strong></span>
+                </label>
+                <button id="btn-start" class="btn primary xl" disabled><span class="ms">play_arrow</span><span id="btn-start-label">Avvia conversione</span></button>
+              </div>
+            </section>
+
+            <!-- PROGRESSO -->
+            <section id="progress-card" class="card hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <h3 id="progress-step-label">Elaborazione in corso…</h3>
+                <button id="btn-cancel" class="btn danger"><span class="ms">stop_circle</span>Annulla</button>
+              </div>
+              <div class="pdf-overall"><span id="progress-pct" class="pblock-pct big">0%</span><span class="faint" style="font-size:12px">avanzamento complessivo</span></div>
+              <div class="steps" id="steps-indicator">
+                <div class="step" id="step-1"><div class="step-dot"><span class="ms">search</span></div>Scansione</div>
+                <div class="step-line"></div>
+                <div class="step" id="step-2"><div class="step-dot"><span class="ms">transform</span></div>Conversione</div>
+                <div class="step-line"></div>
+                <div class="step" id="step-3"><div class="step-dot"><span class="ms">document_scanner</span></div>OCR</div>
+                <div class="step-line"></div>
+                <div class="step" id="step-4"><div class="step-dot"><span class="ms">merge</span></div>Unione</div>
+                <div class="step-line"></div>
+                <div class="step" id="step-5"><div class="step-dot"><span class="ms">save</span></div>Salvataggio</div>
+              </div>
+              <div class="progress"><div id="progress-bar" style="width:0%"></div></div>
+              <div class="progress-meta"><span id="progress-current-file" class="pm-file"></span><span id="progress-count"></span></div>
+              <div class="log-box">
+                <div class="log-head"><span>Log operazioni</span><button class="btn plain" onclick="PDF.clearLog()" style="height:22px">Pulisci</button></div>
+                <div id="log-panel" class="log-panel"></div>
+              </div>
+            </section>
+
+            <!-- RISULTATO -->
+            <section id="result-card" class="card hidden">
+              <div id="result-content"></div>
+              <div id="postproc-section" class="postproc hidden">
+                <div class="group-label">Elaborazione ulteriore</div>
+                <div class="postproc-btns" id="postproc-btns">
+                  <button class="btn" data-pp="compress"><span class="ms">compress</span>Comprimi</button>
+                  <button class="btn" data-pp="split-size"><span class="ms">splitscreen_vertical_add</span>Dividi per dimensione</button>
+                  <button class="btn" data-pp="split-ranges"><span class="ms">format_list_numbered</span>Dividi per range</button>
+                  <button class="btn" data-pp="compress+split"><span class="ms">auto_awesome_motion</span>Comprimi + Dividi</button>
+                </div>
+                <div id="postproc-inline" class="op-sub hidden">
+                  <div id="ppopt-compress" class="hidden">
+                    <div class="group-label">Qualità immagini</div>
+                    <div class="radio-list">
+                      <label class="radio-line"><input type="radio" name="pp-quality" value="screen"/><span>Screen — 72 DPI (massimo risparmio)</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-quality" value="ebook" checked/><span>Ebook — 150 DPI (bilanciato) <span class="badge-rec">consigliato</span></span></label>
+                      <label class="radio-line"><input type="radio" name="pp-quality" value="printer"/><span>Printer — 300 DPI (alta qualità)</span></label>
+                    </div>
+                  </div>
+                  <div id="ppopt-split-size" class="hidden">
+                    <div class="group-label">Dimensione massima per parte</div>
+                    <div class="radio-list">
+                      <label class="radio-line"><input type="radio" name="pp-split-mb" value="15"/><span>15 MB</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-split-mb" value="30"/><span>30 MB</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-split-mb" value="50" checked/><span>50 MB <span class="badge-rec">consigliato</span></span></label>
+                      <label class="radio-line"><input type="radio" name="pp-split-mb" value="custom" id="pp-split-mb-custom"/><span>Personalizzata:
+                        <input type="number" id="pp-custom-mb" value="50" min="1" max="999" class="input num" onfocus="document.getElementById('pp-split-mb-custom').checked=true"/> MB</span></label>
+                    </div>
+                    <div class="group-label">Rinomina i file suddivisi</div>
+                    <div class="radio-list">
+                      <label class="radio-line"><input type="radio" name="pp-naming-ss" value="x_of_y" checked/><span>Parte X di Y</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-naming-ss" value="x"/><span>Parte X</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-naming-ss" value="custom"/><span>Personalizzata:
+                        <input type="text" id="pp-custom-naming-ss" class="input" placeholder="es. Fascicolo" oninput="document.querySelector('input[name=pp-naming-ss][value=custom]').checked=true"/></span></label>
+                    </div>
+                  </div>
+                  <div id="ppopt-split-ranges" class="hidden">
+                    <div class="group-label">Range di pagine <span id="pp-range-total-label" class="faint"></span></div>
+                    <div id="pp-ranges-list"></div>
+                    <button class="btn" onclick="PDF.addRangeRow('pp-ranges-list')"><span class="ms">add</span>Aggiungi parte</button>
+                    <div class="group-label">Rinomina i file suddivisi</div>
+                    <div class="radio-list">
+                      <label class="radio-line"><input type="radio" name="pp-naming-sr" value="x_of_y" checked/><span>Parte X di Y</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-naming-sr" value="x"/><span>Parte X</span></label>
+                      <label class="radio-line"><input type="radio" name="pp-naming-sr" value="custom"/><span>Personalizzata:
+                        <input type="text" id="pp-custom-naming-sr" class="input" placeholder="es. Sezione" oninput="document.querySelector('input[name=pp-naming-sr][value=custom]').checked=true"/></span></label>
+                    </div>
+                  </div>
+                  <button id="btn-apply-postproc" class="btn primary lg" style="margin-top:14px"><span class="ms">check</span><span>Applica</span></button>
+                  <div id="postproc-result" class="hidden" style="margin-top:12px"></div>
+                </div>
+              </div>
+              <div id="result-log-section"></div>
+              <div style="display:flex;gap:8px;margin-top:20px">
+                <button class="btn primary lg" id="btn-reset"><span class="ms">restart_alt</span>Nuova elaborazione</button>
+                <button class="btn lg" id="btn-reveal-output"><span class="ms">folder_open</span>Mostra in Esplora file</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ AREA RICERCA ══════════════════════════════════════════════════ -->
+      <section class="area" id="area-ricerca">
+        <div class="chat-wrap">
+          <div class="chat-top">
+            <div class="scope" id="rc-scope"></div>
+            <div style="display:flex;gap:6px">
+              <button class="btn plain" id="rc-clear"><span class="ms">delete_sweep</span>Nuova conversazione</button>
+            </div>
+          </div>
+          <div class="chat-scroll" id="rc-scroll"><div class="chat-col" id="rc-messages"></div></div>
+          <div class="composer-wrap">
+            <div class="composer">
+              <textarea id="rc-input" rows="1" placeholder="Chiedi qualcosa sui documenti del fascicolo…"></textarea>
+              <button class="send-btn" id="rc-send" disabled title="Invia (Invio)"><span class="ms">arrow_upward</span></button>
+            </div>
+            <div class="composer-hint">Le risposte provengono solo dai documenti del fascicolo, con file e pagina per ogni dato. Invio per inviare, Maiusc+Invio per andare a capo.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ AREA FORENSIC AI ══════════════════════════════════════════════ -->
+      <section class="area" id="area-forensic">
+        <div class="subnav">
+          <div class="segmented" id="fx-nav">
+            <button data-view="overview" class="active"><span class="ms">space_dashboard</span>Panoramica</button>
+            <button data-view="chat"><span class="ms">forum</span>Chat</button>
+            <button data-view="dossier"><span class="ms">gavel</span>Dossier CTU</button>
+            <button data-view="graph"><span class="ms">share</span>Link analysis</button>
+            <button data-view="patterns"><span class="ms">policy</span>Pattern AML</button>
+            <button data-view="timeline"><span class="ms">timeline</span>Timeline</button>
+            <button data-view="registry"><span class="ms">badge</span>Anagrafiche</button>
+            <button data-view="export"><span class="ms">ios_share</span>Esporta</button>
+          </div>
+          <div id="fx-actions"></div>
+        </div>
+        <div class="fx-view active" id="fx-overview"><div class="scroll"><div class="page wide" id="fx-overview-body"></div></div></div>
+        <div class="fx-view" id="fx-chat">
+          <div class="chat-wrap">
+            <div class="chat-scroll" id="fc-scroll"><div class="chat-col" id="fc-messages"></div></div>
+            <div class="composer-wrap">
+              <div class="composer">
+                <textarea id="fc-input" rows="1" placeholder="Es. «MARIO ROSSI ha contatti con ALFA SRL?» oppure «Cosa detiene MARIO ROSSI?»"></textarea>
+                <button class="send-btn" id="fc-send" disabled><span class="ms">arrow_upward</span></button>
+              </div>
+              <div class="composer-hint">Contatti e partecipazioni sono verificati matematicamente sul grafo (cammini minimi) prima della risposta del modello.</div>
+            </div>
+          </div>
+        </div>
+        <div class="fx-view" id="fx-dossier"><div class="scroll"><div class="page" id="fx-dossier-body"></div></div></div>
+        <div class="fx-view" id="fx-graph"><div class="graph-box"><div id="graph"></div><div class="graph-tools"><input class="input" id="graph-search" placeholder="Trova soggetto…"></div><div class="graph-legend" id="graph-legend"></div><div class="graph-panel hidden" id="graph-panel"></div></div></div>
+        <div class="fx-view" id="fx-patterns"><div class="scroll"><div class="page wide" id="fx-patterns-body"></div></div></div>
+        <div class="fx-view" id="fx-timeline"><div class="scroll"><div class="page" id="fx-timeline-body"></div></div></div>
+        <div class="fx-view" id="fx-registry"><div class="scroll"><div class="page wide" id="fx-registry-body"></div></div></div>
+        <div class="fx-view" id="fx-export"><div class="scroll"><div class="page" id="fx-export-body"></div></div></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/ui/vendor/marked.min.js"></script>
+<script src="/ui/vendor/purify.min.js"></script>
+<script src="/ui/vendor/vis-network.min.js"></script>
+<script src="/ui/js/app.js"></script>
+<script src="/ui/js/pdf.js"></script>
+<script src="/ui/js/ricerca.js"></script>
+<script src="/ui/js/forensic.js"></script>
+</body>
+</html>

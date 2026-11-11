@@ -139,8 +139,8 @@ def cpu_name() -> str:
 
 MODEL_CATALOG = [
     # id, etichetta, descrizione, RAM minima consigliata (GB)
-    {"id": "qwen2.5:14b", "label": "Qwen 2.5 14B", "desc": "Massima qualità · lento", "min_ram": 30},
-    {"id": "qwen2.5:7b", "label": "Qwen 2.5 7B", "desc": "Bilanciato · consigliato", "min_ram": 12},
+    {"id": "qwen2.5:14b", "label": "Qwen 2.5 14B", "desc": "Massima qualità · consigliato", "min_ram": 15},
+    {"id": "qwen2.5:7b", "label": "Qwen 2.5 7B", "desc": "Più rapido · meno preciso", "min_ram": 8},
     {"id": "llama3.2:3b", "label": "Llama 3.2 3B", "desc": "Rapido · leggero", "min_ram": 0},
 ]
 

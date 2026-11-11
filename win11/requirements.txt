@@ -1,0 +1,37 @@
+# Forensic Tools (Windows 11 Portable) — dipendenze Python (Python 3.11 x64)
+
+# Finestra nativa Windows 11 (Edge WebView2) + server locale
+pywebview>=5.3
+flask>=3.0.0
+
+# Motore IA offline
+ollama>=0.3.0
+numpy>=1.26
+
+# Lettura documenti
+pymupdf>=1.24.0
+pdfplumber>=0.11.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+pandas>=2.0.0
+python-pptx>=0.6.21
+bankstatementparser>=0.0.29
+
+# Forensic AI: grafo, OLAP
+networkx>=3.2.0
+duckdb>=1.0.0
+
+# Area PDF
+pypdf>=4.0.0
+ocrmypdf>=16.0.0
+img2pdf>=0.5.0
+Pillow>=10.0.0
+asn1crypto>=1.5.0
+fpdf2>=2.7.0
+mammoth>=1.7.0
+weasyprint>=60.0
+
+# Integrazioni opzionali Windows (Word COM + info sistema)
+docx2pdf>=0.1.8
+pywin32>=306
+psutil>=5.9.0

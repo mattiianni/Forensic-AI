@@ -1,0 +1,4 @@
+#include <winresrc.h>
+
+1 ICON "AppIcon.ico"
+1 RT_MANIFEST "app.manifest"

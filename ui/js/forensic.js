@@ -28,6 +28,14 @@ const FX = {
     input.addEventListener('input', () => { RC.autosize(input); this.updateChatSend(); });
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); this.sendChat(); } });
     $('#fc-send').addEventListener('click', () => this.chatRunning ? this.chatRunning.cancel() : this.sendChat());
+    $('#fc-messages').addEventListener('click', (e) => {
+      const cp = e.target.closest('[data-fcopy]');
+      if (!cp) return;
+      const m = (this.chat || [])[+cp.dataset.fcopy];
+      if (!m) return;
+      FT.copy((m.riscontro ? `Riscontro sul grafo:\n${m.riscontro}\n\n` : '') + m.content, 'Risposta');
+      const ic = cp.querySelector('.ms'); if (ic) { ic.textContent = 'check'; setTimeout(() => ic.textContent = 'content_copy', 1400); }
+    });
     window.addEventListener('themechange', () => { if (this.view === 'graph') this.loadGraph(); });
   },
   debounced() { clearTimeout(this._t); this._t = setTimeout(() => this.loadOverview(), 600); },
@@ -131,19 +139,19 @@ const FX = {
     btn.querySelector('.ms').textContent = this.chatRunning ? 'stop' : 'arrow_upward';
     btn.disabled = !this.chatRunning && !$('#fc-input').value.trim();
   },
-  chatMsg(m) {
-    if (m.role === 'user') return `<div class="msg user"><div class="bubble">${esc(m.content)}</div></div>`;
+  chatMsg(m, idx) {
+    if (m.role === 'user') return `<div class="msg user"><button class="copy-btn" data-copy-q title="Copia domanda">${icon('content_copy', 'xs')}</button><div class="bubble">${esc(m.content)}</div></div>`;
     const fact = m.riscontro ? `<div class="banner info" style="margin-bottom:10px">${icon('route')}<div><strong>Riscontro deterministico sul grafo</strong>
       <div class="selectable" style="white-space:pre-wrap;margin-top:4px;font-size:12px">${esc(m.riscontro)}</div></div></div>` : '';
     return `<div class="msg assistant forensic"><div class="avatar">${icon('hub')}</div><div class="answer">${fact}<div class="md">${FT.md(m.content)}</div>
-      ${m.secondi ? `<div class="meta-line">${icon('memory', 'xs')}${esc(m.modello || '')} · ${String(m.secondi).replace('.', ',')} s</div>` : ''}</div></div>`;
+      ${(m.secondi || (idx !== undefined && m.content)) ? `<div class="meta-line">${idx !== undefined && m.content ? `<button class="copy-btn" data-fcopy="${idx}" title="Copia risposta">${icon('content_copy', 'xs')}<span>Copia</span></button>` : ''}${m.secondi ? `<span class="meta-info">${icon('memory', 'xs')}${esc(m.modello || '')} · ${String(m.secondi).replace('.', ',')} s</span>` : ''}</div>` : ''}</div></div>`;
   },
   async loadChat() {
     $('#fx-actions').innerHTML = `<button class="btn plain" onclick="FX.clearChat()">${icon('delete_sweep')}Nuova conversazione</button>`;
     if (this.chatRunning) return;
     this.chat = (await FT.api(`/api/forensic/${FT.fid}/chat`)).messaggi || [];
     const box = $('#fc-messages');
-    box.innerHTML = this.chat.length ? this.chat.map(m => this.chatMsg(m)).join('')
+    box.innerHTML = this.chat.length ? this.chat.map((m, i) => this.chatMsg(m, i)).join('')
       : `<div class="welcome"><div class="w-ico c-purple">${icon('forum', 'xxl')}</div><h2>Chat investigativa</h2>
          <p>Interroga la rete d'indagine: contatti tra soggetti e partecipazioni vengono verificati matematicamente sul grafo prima della risposta del modello.</p></div>`;
     $('#fc-scroll').scrollTop = 1e9;

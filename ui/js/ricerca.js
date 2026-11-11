@@ -117,9 +117,9 @@ const RC = {
   },
 
   msgHtml(m, idx) {
-    if (m.role === 'user') return `<div class="msg user"><div class="bubble">${esc(m.content)}</div></div>`;
-    const meta = m.secondi ? `<div class="meta-line">${icon('memory', 'xs')}${esc(m.modello || '')} · ${String(m.secondi).replace('.', ',')} s
-      <button class="icon-btn" data-copy="${idx}" title="Copia risposta" style="width:24px;height:24px">${icon('content_copy', 'xs')}</button></div>` : '';
+    if (m.role === 'user') return `<div class="msg user"><button class="copy-btn" data-copy-q title="Copia domanda">${icon('content_copy', 'xs')}</button><div class="bubble">${esc(m.content)}</div></div>`;
+    const copy = idx !== undefined && m.content ? `<button class="copy-btn" data-copy="${idx}" title="Copia risposta">${icon('content_copy', 'xs')}<span>Copia</span></button>` : '';
+    const meta = (m.secondi || copy) ? `<div class="meta-line">${copy}${m.secondi ? `<span class="meta-info">${icon('memory', 'xs')}${esc(m.modello || '')} · ${String(m.secondi).replace('.', ',')} s</span>` : ''}</div>` : '';
     return `<div class="msg assistant"><div class="avatar">${icon('manage_search')}</div>
       <div class="answer"><div class="md">${this.formatAnswer(m.content, m.fonti)}</div>${this.sourcesHtml(m.fonti)}${meta}</div></div>`;
   },
@@ -152,8 +152,8 @@ const RC = {
     }
     const cp = e.target.closest('[data-copy]');
     if (cp) {
-      navigator.clipboard.writeText(this.messages[+cp.dataset.copy]?.content || '');
-      FT.toast('Risposta copiata', 'check_circle', 1800);
+      FT.copy(this.messages[+cp.dataset.copy]?.content || '', 'Risposta');
+      const ic = cp.querySelector('.ms'); if (ic) { ic.textContent = 'check'; setTimeout(() => ic.textContent = 'content_copy', 1400); }
     }
   },
 
@@ -166,7 +166,7 @@ const RC = {
     input.value = ''; this.autosize(input);
     if (!this.messages.length) $('#rc-messages').innerHTML = '';
     this.messages.push({ role: 'user', content: q });
-    $('#rc-messages').insertAdjacentHTML('beforeend', this.msgHtml(this.messages[this.messages.length - 1]));
+    $('#rc-messages').insertAdjacentHTML('beforeend', this.msgHtml(this.messages[this.messages.length - 1], this.messages.length - 1));
     const live = { role: 'assistant', content: '', fonti: [] };
     this.live = live;
     $('#rc-messages').insertAdjacentHTML('beforeend', `<div class="msg assistant" id="rc-live"><div class="avatar">${icon('manage_search')}</div>
