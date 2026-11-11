@@ -24,24 +24,54 @@ if [ -n "$OLD_PIDS" ]; then
     sleep 1
 fi
 
-# 2. Controllo Ollama
+# 2. Controllo Archivio Modelli Offline ed Ollama Engine Universale
+if [ -d "$DIR/models/manifests" ]; then
+    export OLLAMA_MODELS="$DIR/models"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Archivio modelli offline locale attivo: $DIR/models" >> "$LOG_FILE"
+fi
+
+export OLLAMA_NUM_PARALLEL=2
+export OLLAMA_FLASH_ATTENTION=1
+
 if ! pgrep -x "ollama" > /dev/null; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Avvio motore locale Ollama..." >> "$LOG_FILE"
     if [ -d "/Applications/Ollama.app" ]; then
-        open -a Ollama --hide
+        open -a "/Applications/Ollama.app" --hide
+    elif [ -d "$DIR/lib/Ollama.app" ]; then
+        open -a "$DIR/lib/Ollama.app" --hide
     elif command -v ollama &> /dev/null; then
         ollama serve > /dev/null 2>&1 &
     fi
-    sleep 2
+    sleep 3
 fi
 
-# 3. Controllo ambiente virtuale
-if [ ! -d ".venv" ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Creazione ambiente virtuale..." >> "$LOG_FILE"
+# 3. Rilevamento Architettura & Ambiente Virtuale (arm64 Apple Silicon vs x86_64 Intel)
+ARCH=$(uname -m)
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Architettura macchina rilevata: $ARCH" >> "$LOG_FILE"
+
+if [ "$ARCH" = "arm64" ]; then
+    VENV_TARGET="$DIR/.venv_arm64"
+else
+    VENV_TARGET="$DIR/.venv_x86_64"
+fi
+
+# Se esiste la vecchia .venv arm64 la preserviamo
+if [ ! -d "$VENV_TARGET" ] && [ -d "$DIR/.venv" ] && [ ! -L "$DIR/.venv" ]; then
+    OLD_VENV_ARCH=$("$DIR/.venv/bin/python" -c "import platform; print(platform.machine())" 2>/dev/null || true)
+    if [ "$OLD_VENV_ARCH" = "$ARCH" ]; then
+        mv "$DIR/.venv" "$VENV_TARGET"
+    fi
+fi
+
+if [ ! -d "$VENV_TARGET" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Preparazione ambiente virtuale offline per $ARCH..." >> "$LOG_FILE"
     bash "$DIR/setup_environment.sh" >> "$LOG_FILE" 2>&1
 fi
 
-source "$DIR/.venv/bin/activate"
+rm -rf "$DIR/.venv"
+ln -sf "$VENV_TARGET" "$DIR/.venv"
+
+source "$VENV_TARGET/bin/activate"
 
 PORT=8501
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Avvio server Streamlit su porta $PORT..." >> "$LOG_FILE"
@@ -60,7 +90,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-streamlit run app.py \
+"$DIR/.venv/bin/streamlit" run app.py \
     --server.port=$PORT \
     --server.headless=true \
     --browser.gatherUsageStats=false \

@@ -10,9 +10,11 @@ from logger import log, leggi_ultimi_log
 from parser import analizza_ed_estrai, MAX_CARATTERI_CONSIGLIATI
 from ai_engine import (
     get_active_model,
+    get_available_models,
     estrai_entita_e_relazioni_avanzato,
     genera_deduzioni,
     genera_dossier_forense_globale,
+    ULTRA_MODEL,
     BEST_MODEL,
     FAST_MODEL,
 )
@@ -53,45 +55,86 @@ if "timestamp_analisi" not in st.session_state:
 is_light = (st.session_state.tema == "light")
 
 if is_light:
-    c_bg = "#F5F5F7"
-    c_sidebar = "#E8E8ED"
+    c_bg = "#F5F6F8"
+    c_sidebar = "#ECEEF2"
     c_card = "#FFFFFF"
-    c_card_inner = "#F9F9FA"
-    c_border = "rgba(0, 0, 0, 0.08)"
-    c_border_hover = "rgba(0, 113, 227, 0.3)"
-    c_text_primary = "#1D1D1F"
-    c_text_secondary = "#515154"
-    c_text_tertiary = "#86868B"
+    c_card_inner = "#F8F9FA"
+    c_border = "rgba(0, 0, 0, 0.09)"
+    c_border_hover = "rgba(0, 113, 227, 0.4)"
+    c_text_primary = "#111827"
+    c_text_secondary = "#374151"
+    c_text_tertiary = "#6B7280"
     c_blue = "#0071E3"
-    c_blue_hover = "#0077ED"
-    c_blue_bg = "rgba(0, 113, 227, 0.10)"
+    c_blue_hover = "#005BB5"
+    c_blue_bg = "rgba(0, 113, 227, 0.08)"
     c_tab_bg = "rgba(0, 0, 0, 0.05)"
-    c_tab_active_bg = "#FFFFFF"
-    c_tab_active_text = "#0071E3"
-    c_shadow = "0 2px 14px rgba(0, 0, 0, 0.05)"
-    c_code_bg = "#F0F0F2"
+    c_tab_text = "#374151"
+    c_tab_active_bg = "#0071E3"
+    c_tab_active_text = "#FFFFFF"
+    c_shadow = "0 2px 10px rgba(0, 0, 0, 0.04)"
+    c_btn_bg = "#FFFFFF"
+    c_btn_text = "#111827"
+    c_btn_border = "rgba(0, 0, 0, 0.14)"
+    c_btn_hover_bg = "#F3F4F6"
+    c_input_bg = "#FFFFFF"
+    c_dropzone_bg = "#FFFFFF"
+    c_code_bg = "#F3F4F6"
     c_terminal_bg = "#1E2024"
     c_terminal_text = "#38BDF8"
+    # Pills
+    c_pill_green_txt = "#15803D"
+    c_pill_green_bg = "rgba(34, 197, 94, 0.14)"
+    c_pill_green_bdr = "rgba(34, 197, 94, 0.3)"
+    c_pill_orange_txt = "#C2410C"
+    c_pill_orange_bg = "rgba(249, 115, 22, 0.14)"
+    c_pill_orange_bdr = "rgba(249, 115, 22, 0.3)"
+    c_pill_red_txt = "#DC2626"
+    c_pill_red_bg = "rgba(239, 68, 68, 0.14)"
+    c_pill_red_bdr = "rgba(239, 68, 68, 0.3)"
+    c_pill_purple_txt = "#7E22CE"
+    c_pill_purple_bg = "rgba(168, 85, 247, 0.14)"
+    c_pill_purple_bdr = "rgba(168, 85, 247, 0.3)"
 else:
+    # DARK MODE: Apple Obsidian / High Contrast Dark
     c_bg = "#0D1117"
-    c_sidebar = "#080B10"
-    c_card = "rgba(22, 27, 34, 0.85)"
-    c_card_inner = "rgba(255, 255, 255, 0.025)"
-    c_border = "rgba(255, 255, 255, 0.08)"
-    c_border_hover = "rgba(10, 132, 255, 0.4)"
-    c_text_primary = "#F5F5F7"
-    c_text_secondary = "#8B949E"
-    c_text_tertiary = "#6E6E73"
+    c_sidebar = "#11151C"
+    c_card = "#161B22"
+    c_card_inner = "#21262D"
+    c_border = "rgba(255, 255, 255, 0.14)"
+    c_border_hover = "rgba(10, 132, 255, 0.6)"
+    c_text_primary = "#FFFFFF"
+    c_text_secondary = "#D1D5DB"
+    c_text_tertiary = "#9CA3AF"
     c_blue = "#0A84FF"
-    c_blue_hover = "#0071E3"
-    c_blue_bg = "rgba(10, 132, 255, 0.15)"
-    c_tab_bg = "rgba(255, 255, 255, 0.04)"
-    c_tab_active_bg = "rgba(255, 255, 255, 0.15)"
+    c_blue_hover = "#388BFD"
+    c_blue_bg = "rgba(10, 132, 255, 0.20)"
+    c_tab_bg = "#161B22"
+    c_tab_text = "#D1D5DB"
+    c_tab_active_bg = "#0A84FF"
     c_tab_active_text = "#FFFFFF"
-    c_shadow = "0 4px 20px rgba(0, 0, 0, 0.35)"
+    c_shadow = "0 4px 20px rgba(0, 0, 0, 0.50)"
+    c_btn_bg = "#21262D"
+    c_btn_text = "#FFFFFF"
+    c_btn_border = "rgba(255, 255, 255, 0.18)"
+    c_btn_hover_bg = "#30363D"
+    c_input_bg = "#161B22"
+    c_dropzone_bg = "#161B22"
     c_code_bg = "#161B22"
     c_terminal_bg = "#07090D"
     c_terminal_text = "#38BDF8"
+    # Pills
+    c_pill_green_txt = "#30D158"
+    c_pill_green_bg = "rgba(48, 209, 88, 0.20)"
+    c_pill_green_bdr = "rgba(48, 209, 88, 0.4)"
+    c_pill_orange_txt = "#FF9F0A"
+    c_pill_orange_bg = "rgba(255, 159, 10, 0.20)"
+    c_pill_orange_bdr = "rgba(255, 159, 10, 0.4)"
+    c_pill_red_txt = "#FF453A"
+    c_pill_red_bg = "rgba(255, 69, 58, 0.20)"
+    c_pill_red_bdr = "rgba(255, 69, 58, 0.4)"
+    c_pill_purple_txt = "#BF5AF2"
+    c_pill_purple_bg = "rgba(191, 90, 242, 0.20)"
+    c_pill_purple_bdr = "rgba(191, 90, 242, 0.4)"
 
 st.markdown(f"""
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
@@ -115,7 +158,7 @@ st.markdown(f"""
     }}
 
     /* 2. COLORI E FONT GLOBALI */
-    html, body, [class*="css"], [data-testid="stAppViewContainer"] {{
+    html, body, [class*="css"], [data-testid="stAppViewContainer"], .main {{
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif !important;
         background-color: {c_bg} !important;
         color: {c_text_primary} !important;
@@ -152,17 +195,77 @@ st.markdown(f"""
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 0.76rem !important;
+        font-size: 0.74rem !important;
         text-transform: uppercase !important;
         letter-spacing: 0.08em !important;
         color: {c_text_tertiary} !important;
         font-weight: 700 !important;
         margin-top: 0.8rem !important;
-        margin-bottom: 0.4rem !important;
+        margin-bottom: 0.35rem !important;
+    }}
+
+    /* VERO CARD CONTAINER SIDEBAR STREAMLIT */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {{
+        background-color: {c_card} !important;
+        border: 1px solid {c_border} !important;
+        border-radius: 12px !important;
+        box-shadow: {c_shadow} !important;
+        padding: 4px 6px !important;
+        margin-bottom: 12px !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"]:hover {{
+        border-color: {c_border_hover} !important;
+    }}
+
+    /* RADIO BUTTONS ED ETICHETTE CONTROLLI */
+    div[data-testid="stRadio"] label p,
+    div[data-testid="stRadio"] span {{
+        color: {c_text_primary} !important;
+        font-size: 0.84rem !important;
+        font-weight: 500 !important;
+    }}
+    div[data-testid="stRadio"] [data-testid="stWidgetLabel"] p {{
+        color: {c_text_secondary} !important;
+        font-weight: 600 !important;
+        font-size: 0.82rem !important;
+        margin-bottom: 4px !important;
+    }}
+    div[data-testid="stRadio"] label > div:first-child {{
+        background-color: {c_card_inner} !important;
+        border-color: {c_border} !important;
+    }}
+
+    /* EXPANDERS IN SIDEBAR E MAIN */
+    [data-testid="stExpander"] {{
+        background-color: {c_card} !important;
+        border: 1px solid {c_border} !important;
+        border-radius: 10px !important;
+        box-shadow: {c_shadow} !important;
+        margin-bottom: 8px !important;
+        overflow: hidden !important;
+    }}
+    [data-testid="stExpander"] details summary {{
+        background-color: transparent !important;
+        padding: 8px 12px !important;
+        border-radius: 10px !important;
+    }}
+    [data-testid="stExpander"] details summary p {{
+        color: {c_text_primary} !important;
+        font-weight: 600 !important;
+        font-size: 0.84rem !important;
+    }}
+    [data-testid="stExpander"] details summary svg {{
+        color: {c_text_secondary} !important;
+    }}
+    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+        border-top: 1px solid {c_border} !important;
+        background-color: {c_card_inner} !important;
+        padding: 10px 12px !important;
     }}
 
     .apple-card {{
-        background: {c_card};
+        background-color: {c_card};
         border: 1px solid {c_border};
         border-radius: 12px;
         padding: 14px 16px;
@@ -221,29 +324,29 @@ st.markdown(f"""
         white-space: nowrap;
     }}
     .pill-blue {{
-        background: {c_blue_bg};
+        background-color: {c_blue_bg};
         color: {c_blue};
         border: 1px solid {c_blue_bg};
     }}
     .pill-green {{
-        background: rgba(48, 209, 88, 0.15);
-        color: #30D158;
-        border: 1px solid rgba(48, 209, 88, 0.3);
+        background-color: {c_pill_green_bg};
+        color: {c_pill_green_txt};
+        border: 1px solid {c_pill_green_bdr};
     }}
     .pill-orange {{
-        background: rgba(255, 159, 10, 0.15);
-        color: #FF9F0A;
-        border: 1px solid rgba(255, 159, 10, 0.3);
+        background-color: {c_pill_orange_bg};
+        color: {c_pill_orange_txt};
+        border: 1px solid {c_pill_orange_bdr};
     }}
     .pill-red {{
-        background: rgba(255, 69, 58, 0.15);
-        color: #FF453A;
-        border: 1px solid rgba(255, 69, 58, 0.3);
+        background-color: {c_pill_red_bg};
+        color: {c_pill_red_txt};
+        border: 1px solid {c_pill_red_bdr};
     }}
     .pill-purple {{
-        background: rgba(191, 90, 242, 0.15);
-        color: #BF5AF2;
-        border: 1px solid rgba(191, 90, 242, 0.3);
+        background-color: {c_pill_purple_bg};
+        color: {c_pill_purple_txt};
+        border: 1px solid {c_pill_purple_bdr};
     }}
 
     /* 4. METRICHE IN GRIGLIA PULITA */
@@ -255,7 +358,7 @@ st.markdown(f"""
         margin-bottom: 8px;
     }}
     .metric-box {{
-        background: {c_card_inner};
+        background-color: {c_card_inner};
         border: 1px solid {c_border};
         border-radius: 10px;
         padding: 10px 6px;
@@ -277,12 +380,16 @@ st.markdown(f"""
         font-weight: 600;
     }}
 
-    /* 5. TABS DI NAVIGAZIONE A SEGMENTI (NESSUNA SOVRAPPOSIZIONE) */
+    /* 5. TABS DI NAVIGAZIONE AD ALTA LEGGIBILITÀ (NESSUNA LINEA ROSSA) */
+    [data-baseweb="tab-highlight"],
+    [data-baseweb="tab-border"] {{
+        display: none !important;
+    }}
     .stTabs [data-baseweb="tab-list"] {{
         display: flex !important;
         flex-wrap: wrap !important;
         gap: 6px !important;
-        background: {c_tab_bg} !important;
+        background-color: {c_tab_bg} !important;
         padding: 6px !important;
         border-radius: 12px !important;
         border: 1px solid {c_border} !important;
@@ -295,63 +402,210 @@ st.markdown(f"""
         border-radius: 8px !important;
         font-size: 0.86rem !important;
         font-weight: 500 !important;
-        color: {c_text_secondary} !important;
         border: 1px solid transparent !important;
-        background: transparent !important;
+        background-color: transparent !important;
         white-space: nowrap !important;
         transition: all 0.15s ease-in-out !important;
     }}
-    .stTabs [data-baseweb="tab"]:hover {{
-        color: {c_text_primary} !important;
-        background: rgba(128, 128, 128, 0.08) !important;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background: {c_tab_active_bg} !important;
-        color: {c_tab_active_text} !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-        border: 1px solid {c_border} !important;
+    .stTabs [data-baseweb="tab"] p,
+    .stTabs [data-baseweb="tab"] span,
+    .stTabs [data-baseweb="tab"] div {{
+        color: {c_tab_text} !important;
         font-weight: 600 !important;
     }}
+    .stTabs [data-baseweb="tab"]:hover {{
+        background-color: rgba(128, 128, 128, 0.15) !important;
+    }}
+    .stTabs [data-baseweb="tab"]:hover p,
+    .stTabs [data-baseweb="tab"]:hover span {{
+        color: {c_text_primary} !important;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {c_tab_active_bg} !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+        border: 1px solid {c_border} !important;
+    }}
+    .stTabs [aria-selected="true"] p,
+    .stTabs [aria-selected="true"] span,
+    .stTabs [aria-selected="true"] div {{
+        color: {c_tab_active_text} !important;
+        font-weight: 700 !important;
+    }}
 
-    /* 6. BOTTONI APPLE STYLE */
-    .stButton>button {{
-        background: {c_blue} !important;
-        color: #FFFFFF !important;
-        border: none !important;
+    /* 6. BOTTONI APPLE STYLE (OVERRIDE TOTALE) */
+    button[data-testid="baseButton-secondary"],
+    button[data-testid="baseButton-primary"],
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="stBaseButton-primary"],
+    [data-testid="stButton"] > button,
+    [data-testid="stDownloadButton"] > button,
+    .stButton > button,
+    .stDownloadButton > button {{
+        background-color: {c_btn_bg} !important;
+        color: {c_btn_text} !important;
+        border: 1px solid {c_btn_border} !important;
         border-radius: 10px !important;
         padding: 7px 16px !important;
         font-weight: 600 !important;
-        font-size: 0.88rem !important;
+        font-size: 0.85rem !important;
         transition: all 0.18s ease-in-out !important;
-        box-shadow: 0 2px 6px rgba(0, 113, 227, 0.25) !important;
+        box-shadow: {c_shadow} !important;
     }}
-    .stButton>button:hover {{
-        background: {c_blue_hover} !important;
-        box-shadow: 0 4px 12px rgba(0, 113, 227, 0.35) !important;
+    button[data-testid="baseButton-secondary"]:hover,
+    button[data-testid="baseButton-primary"]:hover,
+    [data-testid="stBaseButton-secondary"]:hover,
+    [data-testid="stBaseButton-primary"]:hover,
+    [data-testid="stButton"] > button:hover,
+    [data-testid="stDownloadButton"] > button:hover,
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {{
+        background-color: {c_btn_hover_bg} !important;
+        border-color: {c_blue} !important;
+        color: {c_blue} !important;
         transform: translateY(-1px);
     }}
+    /* Pulsante primario (es. Avvia / Compila) */
+    [data-testid="stButton"] > button[kind="primary"],
+    button[kind="primary"] {{
+        background-color: {c_blue} !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        font-weight: 600 !important;
+    }}
 
-    .stDownloadButton>button {{
-        background: {c_card_inner} !important;
+    /* 7. DROPZONE UPLOAD STILIZZATA PULITA & CHIP FILE */
+    [data-testid="stFileUploader"] {{
+        background-color: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+    }}
+    [data-testid="stFileUploaderDropzone"],
+    [data-testid="stFileUploader"] section,
+    section[data-testid="stFileUploaderDropzone"] {{
+        background-color: {c_dropzone_bg} !important;
+        border: 1.5px dashed {c_blue} !important;
+        border-radius: 12px !important;
+        padding: 16px 20px !important;
+        transition: all 0.2s ease !important;
+        box-shadow: {c_shadow} !important;
+    }}
+    [data-testid="stFileUploaderDropzone"]:hover,
+    [data-testid="stFileUploader"] section:hover {{
+        border-color: {c_blue_hover} !important;
+        background-color: {c_card_inner} !important;
+    }}
+    [data-testid="stFileUploaderDropzone"] div,
+    [data-testid="stFileUploaderDropzone"] span,
+    [data-testid="stFileUploaderDropzone"] p,
+    [data-testid="stFileUploaderDropzone"] small,
+    [data-testid="stFileUploader"] section * {{
+        color: {c_text_secondary} !important;
+    }}
+    [data-testid="stFileUploaderDropzone"] button,
+    [data-testid="stFileUploader"] section button {{
+        background-color: {c_blue_bg} !important;
+        color: {c_blue} !important;
+        border: 1px solid {c_border} !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+    }}
+
+    /* CHIP FILE CARICATI DENTRO LA DROPZONE (MAI BIANCHI IN DARK MODE) */
+    [data-testid="stFileChip"],
+    [data-testid="stFileChips"] > div {{
+        background-color: {c_card_inner} !important;
+        border: 1px solid {c_border} !important;
+        color: {c_text_primary} !important;
+        border-radius: 8px !important;
+    }}
+    [data-testid="stFileChip"] span,
+    [data-testid="stFileChip"] div,
+    [data-testid="stFileChip"] p,
+    [data-testid="stFileChip"] small {{
+        color: {c_text_primary} !important;
+    }}
+    [data-testid="stFileChipDeleteBtn"] svg,
+    [data-testid="stFileChipDeleteBtn"] button {{
+        color: {c_text_secondary} !important;
+    }}
+
+    /* 8. BARRA CHAT INPUT & MESSAGGI COERENTI */
+    [data-testid="stChatInput"],
+    [data-testid="stChatInput"] > div,
+    div[data-testid="stChatInputContainer"] {{
+        background-color: {c_input_bg} !important;
+        border: 1px solid {c_border} !important;
+        border-radius: 14px !important;
+        box-shadow: {c_shadow} !important;
+        padding: 3px !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }}
+    [data-testid="stChatInput"]:focus-within,
+    [data-testid="stChatInput"] > div:focus-within {{
+        border-color: {c_blue} !important;
+        box-shadow: 0 0 0 2px {c_blue_bg} !important;
+    }}
+    [data-testid="stChatInput"] textarea,
+    [data-testid="stChatInputTextArea"] {{
+        background: transparent !important;
+        color: {c_text_primary} !important;
+        font-size: 0.90rem !important;
+    }}
+    [data-testid="stChatInput"] textarea::placeholder,
+    [data-testid="stChatInputTextArea"]::placeholder {{
+        color: {c_text_tertiary} !important;
+    }}
+    [data-testid="stChatInputSubmitButton"],
+    [data-testid="stChatInput"] button {{
+        background-color: {c_blue} !important;
+        color: #FFFFFF !important;
+        border-radius: 8px !important;
+        border: none !important;
+    }}
+    [data-testid="stChatInput"] button:disabled {{
+        background-color: {c_border} !important;
+        color: {c_text_tertiary} !important;
+    }}
+
+    [data-testid="stChatMessage"] {{
+        background-color: {c_card} !important;
+        border: 1px solid {c_border} !important;
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
+        box-shadow: {c_shadow} !important;
+        margin-bottom: 8px !important;
+        color: {c_text_primary} !important;
+    }}
+    [data-testid="stChatMessage"] p {{
+        color: {c_text_primary} !important;
+    }}
+
+    /* 9. CONTROLLI INPUT AGGIUNTIVI (TEXT AREA, SELECTBOX, TOGGLE, SPINNER) */
+    [data-testid="stTextArea"] textarea {{
+        background-color: {c_card_inner} !important;
         color: {c_text_primary} !important;
         border: 1px solid {c_border} !important;
         border-radius: 10px !important;
-        font-weight: 500 !important;
-        font-size: 0.84rem !important;
-        width: 100% !important;
-        transition: all 0.15s ease-in-out !important;
     }}
-    .stDownloadButton>button:hover {{
-        border-color: {c_blue} !important;
-        color: {c_blue} !important;
+    [data-testid="stSelectbox"] div[data-baseweb="select"] > div {{
+        background-color: {c_card} !important;
+        border: 1px solid {c_border} !important;
+        border-radius: 10px !important;
+        color: {c_text_primary} !important;
     }}
-
-    /* 7. DROPZONE UPLOAD */
-    [data-testid="stFileUploader"] {{
-        background: {c_card_inner} !important;
-        border: 1.5px dashed {c_blue} !important;
-        border-radius: 12px !important;
-        padding: 14px !important;
+    [data-testid="stSelectbox"] span {{
+        color: {c_text_primary} !important;
+    }}
+    [data-testid="stToggle"] label p {{
+        color: {c_text_primary} !important;
+        font-weight: 600 !important;
+    }}
+    div[data-testid="stSpinner"],
+    div[data-testid="stSpinner"] > div,
+    div[data-testid="stSpinner"] p,
+    div[data-testid="stSpinner"] span {{
+        color: {c_text_primary} !important;
+        font-weight: 600 !important;
     }}
 
     .log-box {{
@@ -368,7 +622,7 @@ st.markdown(f"""
     }}
 
     .dossier-box {{
-        background: {c_card};
+        background-color: {c_card};
         border: 1px solid {c_border};
         border-radius: 14px;
         padding: 24px 28px;
@@ -384,197 +638,210 @@ st.markdown(f"""
 with st.sidebar:
     # CARD 1: TEMA & MOTORE IA
     st.markdown('<div class="sidebar-section-title"><span class="material-symbols-outlined" style="font-size:16px;">settings</span> Configurazione Sistema</div>', unsafe_allow_html=True)
-    st.markdown('<div class="apple-card">', unsafe_allow_html=True)
+    with st.container(border=True):
+        # Toggle Tema Chiaro / Scuro
+        col_t1, col_t2 = st.columns([1, 1.2])
+        with col_t1:
+            st.markdown(f"<span style='font-size: 0.85rem; font-weight: 600; color:{c_text_primary};'>Interfaccia</span>", unsafe_allow_html=True)
+        with col_t2:
+            tema_scelto = st.toggle("☀️ Tema Chiaro" if not is_light else "🌙 Tema Scuro", value=is_light, key="switch_tema_app")
+            if tema_scelto != is_light:
+                st.session_state.tema = "light" if tema_scelto else "dark"
+                st.rerun()
 
-    # Toggle Tema Chiaro / Scuro
-    col_t1, col_t2 = st.columns([1, 1.2])
-    with col_t1:
-        st.markdown(f"<span style='font-size: 0.85rem; font-weight: 600; color:{c_text_primary};'>Interfaccia</span>", unsafe_allow_html=True)
-    with col_t2:
-        tema_scelto = st.toggle("☀️ Tema Chiaro" if not is_light else "🌙 Tema Scuro", value=is_light, key="switch_tema_app")
-        if tema_scelto != is_light:
-            st.session_state.tema = "light" if tema_scelto else "dark"
-            st.rerun()
+        st.markdown(f"<hr style='margin: 8px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
 
-    st.markdown(f"<hr style='margin: 8px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
+        disp_modelli = get_available_models()
+        ha_14b = disp_modelli["has_14b"]
 
-    profilo = st.radio(
-        "Modello di Ragionamento:",
-        options=[
-            "Massima Precisione (Qwen 2.5 7B)",
-            "Scansione Rapida (Llama 3.2 3B)",
-        ],
-        index=0,
-        label_visibility="visible",
-    )
-    modello_selezionato = BEST_MODEL if "Qwen" in profilo else FAST_MODEL
+        opzioni_modello = []
+        if ha_14b:
+            opzioni_modello.append("🚀 Ultra-Potenza (Qwen 2.5 14B)")
+        opzioni_modello.append("⚖️ Massima Precisione (Qwen 2.5 7B)")
+        opzioni_modello.append("⚡ Scansione Rapida (Llama 3.2 3B)")
 
-    st.markdown(f"""
-    <div style="margin-top: 8px;">
-        <span class="apple-pill pill-blue"><span class="material-symbols-outlined" style="font-size:14px;">bolt</span> Apple Silicon Metal M1 Pro</span>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        profilo = st.radio(
+            "Modello di Ragionamento:",
+            options=opzioni_modello,
+            index=0,
+            label_visibility="visible",
+        )
+
+        if "14B" in profilo:
+            modello_selezionato = disp_modelli.get("name_14b", ULTRA_MODEL)
+        elif "7B" in profilo:
+            modello_selezionato = disp_modelli.get("name_7b", BEST_MODEL)
+        else:
+            modello_selezionato = disp_modelli.get("name_3b", FAST_MODEL)
+
+        if not ha_14b:
+            with st.expander("💡 Vuoi attivare Qwen 2.5 14B?", expanded=False):
+                st.markdown(f"""
+                <div style="font-size: 0.78rem; color: {c_text_secondary};">
+                    Per installare il modello forense heavyweight (14B, ~8.9GB RAM):<br/>
+                    <code style="display:block; margin: 4px 0; padding: 4px; background: rgba(128,128,128,0.2); border-radius: 4px;">ollama pull qwen2.5:14b</code>
+                    <em>Una volta completato, apparirà automaticamente tra i modelli disponibili.</em>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div style="margin-top: 8px;">
+            <span class="apple-pill pill-blue"><span class="material-symbols-outlined" style="font-size:14px;">bolt</span> Apple Silicon Metal M1 Pro (8P+16GPU)</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # CARD 2: METRICHE FASCICOLO ACCUMULATO
     st.markdown('<div class="sidebar-section-title"><span class="material-symbols-outlined" style="font-size:16px;">analytics</span> Metriche Fascicolo</div>', unsafe_allow_html=True)
-    st.markdown('<div class="apple-card">', unsafe_allow_html=True)
-    num_nodi = len(st.session_state.gestore_grafo.grafo.nodes)
-    num_archi = len(st.session_state.gestore_grafo.grafo.edges)
-    num_doc = len(st.session_state.file_letti)
+    with st.container(border=True):
+        num_nodi = len(st.session_state.gestore_grafo.grafo.nodes)
+        num_archi = len(st.session_state.gestore_grafo.grafo.edges)
+        num_doc = len(st.session_state.file_letti)
 
-    st.markdown(f"""
-    <div class="metric-row">
-        <div class="metric-box">
-            <div class="metric-val">{num_doc}</div>
-            <div class="metric-lbl">Atti</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-val">{num_nodi}</div>
-            <div class="metric-lbl">Soggetti</div>
-        </div>
-        <div class="metric-box">
-            <div class="metric-val">{num_archi}</div>
-            <div class="metric-lbl">Relazioni</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Pattern Alert Pills
-    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
-    cicli = schemi.get("flussi_circolari", [])
-    if cicli:
         st.markdown(f"""
-        <div class="apple-pill pill-red" style="width: 100%; justify-content: center; margin-top: 6px;">
-            <span class="material-symbols-outlined" style="font-size:14px;">sync_problem</span> {len(cicli)} Flussi Circolari (Ring)
+        <div class="metric-row">
+            <div class="metric-box">
+                <div class="metric-val">{num_doc}</div>
+                <div class="metric-lbl">Atti</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-val">{num_nodi}</div>
+                <div class="metric-lbl">Soggetti</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-val">{num_archi}</div>
+                <div class="metric-lbl">Relazioni</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-    hubs = schemi.get("hub_dominus", [])
-    if hubs:
-        st.markdown(f"""
-        <div class="apple-pill pill-orange" style="width: 100%; justify-content: center; margin-top: 6px;">
-            <span class="material-symbols-outlined" style="font-size:14px;">hub</span> {len(hubs)} Hub / Dominus (Star)
-        </div>
-        """, unsafe_allow_html=True)
+        # Pattern Alert Pills
+        schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
+        cicli = schemi.get("flussi_circolari", [])
+        if cicli:
+            st.markdown(f"""
+            <div class="apple-pill pill-red" style="width: 100%; justify-content: center; margin-top: 6px;">
+                <span class="material-symbols-outlined" style="font-size:14px;">sync_problem</span> {len(cicli)} Flussi Circolari (Ring)
+            </div>
+            """, unsafe_allow_html=True)
 
-    scatole = schemi.get("scatole_cinesi", [])
-    if scatole:
-        st.markdown(f"""
-        <div class="apple-pill pill-purple" style="width: 100%; justify-content: center; margin-top: 6px;">
-            <span class="material-symbols-outlined" style="font-size:14px;">account_tree</span> {len(scatole)} Catene di Controllo (Chain)
-        </div>
-        """, unsafe_allow_html=True)
+        hubs = schemi.get("hub_dominus", [])
+        if hubs:
+            st.markdown(f"""
+            <div class="apple-pill pill-orange" style="width: 100%; justify-content: center; margin-top: 6px;">
+                <span class="material-symbols-outlined" style="font-size:14px;">hub</span> {len(hubs)} Hub / Dominus (Star)
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+        scatole = schemi.get("scatole_cinesi", [])
+        if scatole:
+            st.markdown(f"""
+            <div class="apple-pill pill-purple" style="width: 100%; justify-content: center; margin-top: 6px;">
+                <span class="material-symbols-outlined" style="font-size:14px;">account_tree</span> {len(scatole)} Catene di Controllo (Chain)
+            </div>
+            """, unsafe_allow_html=True)
 
     # CARD 3: GESTIONE INDAGINE & BACKUP
     st.markdown('<div class="sidebar-section-title"><span class="material-symbols-outlined" style="font-size:16px;">folder_managed</span> Gestione Indagine</div>', unsafe_allow_html=True)
-    st.markdown('<div class="apple-card">', unsafe_allow_html=True)
+    with st.container(border=True):
+        col_btn_a, col_btn_b = st.columns(2)
+        with col_btn_a:
+            stato_completo = {
+                "grafo_dati": st.session_state.gestore_grafo.esporta_stato(),
+                "dossier_globale": st.session_state.dossier_globale,
+                "documenti_acquisiti": {
+                    k: {"caratteri": v.get("num_caratteri", v.get("caratteri", 0)), "num_blocchi": v.get("num_blocchi", 1), "estensione": v.get("estensione", "")}
+                    for k, v in st.session_state.documenti_acquisiti.items()
+                },
+                "file_letti": list(st.session_state.file_letti),
+                "storico": st.session_state.storico,
+                "chat_messages": st.session_state.chat_messages,
+                "timestamp_analisi": st.session_state.timestamp_analisi,
+            }
+            st.download_button(
+                label="💾 Salva",
+                data=json.dumps(stato_completo, indent=2, ensure_ascii=False),
+                file_name="indagine_forense.json",
+                mime="application/json",
+                help="Scarica il file sessione .json per continuare in seguito",
+                use_container_width=True,
+            )
+        with col_btn_b:
+            if st.button("🗑️ Reset", help="Azzera fascicolo, grafo e chat", use_container_width=True):
+                log.info("Reset indagine richiesto dall'utente: azzeramento totale")
+                st.session_state.gestore_grafo = GestoreGrafo()
+                st.session_state.dossier_globale = None
+                st.session_state.documenti_acquisiti = {}
+                st.session_state.file_letti = set()
+                st.session_state.storico = []
+                st.session_state.chat_messages = []
+                st.session_state.file_forzati = set()
+                st.session_state.timestamp_analisi = None
+                st.rerun()
 
-    col_btn_a, col_btn_b = st.columns(2)
-    with col_btn_a:
-        stato_completo = {
-            "grafo_dati": st.session_state.gestore_grafo.esporta_stato(),
-            "dossier_globale": st.session_state.dossier_globale,
-            "documenti_acquisiti": {
-                k: {"caratteri": v.get("num_caratteri", v.get("caratteri", 0)), "num_blocchi": v.get("num_blocchi", 1), "estensione": v.get("estensione", "")}
-                for k, v in st.session_state.documenti_acquisiti.items()
-            },
-            "file_letti": list(st.session_state.file_letti),
-            "storico": st.session_state.storico,
-            "chat_messages": st.session_state.chat_messages,
-            "timestamp_analisi": st.session_state.timestamp_analisi,
-        }
-        st.download_button(
-            label="💾 Salva",
-            data=json.dumps(stato_completo, indent=2, ensure_ascii=False),
-            file_name="indagine_forense.json",
-            mime="application/json",
-            help="Scarica il file sessione .json per continuare in seguito",
-            use_container_width=True,
-        )
-    with col_btn_b:
-        if st.button("🗑️ Reset", help="Azzera fascicolo, grafo e chat", use_container_width=True):
-            log.info("Reset indagine richiesto dall'utente: azzeramento totale")
-            st.session_state.gestore_grafo = GestoreGrafo()
-            st.session_state.dossier_globale = None
-            st.session_state.documenti_acquisiti = {}
-            st.session_state.file_letti = set()
-            st.session_state.storico = []
-            st.session_state.chat_messages = []
-            st.session_state.file_forzati = set()
-            st.session_state.timestamp_analisi = None
-            st.rerun()
+        with st.expander("📥 Ripristina Backup JSON", expanded=False):
+            file_stato = st.file_uploader("Carica file sessione:", type=["json"], key="loader_sessione", label_visibility="collapsed")
+            if file_stato is not None:
+                if st.button("Conferma Ripristino", use_container_width=True):
+                    try:
+                        dati = json.loads(file_stato.read().decode("utf-8"))
+                        st.session_state.gestore_grafo.importa_stato(dati.get("grafo_dati", {}))
+                        st.session_state.dossier_globale = dati.get("dossier_globale")
+                        st.session_state.documenti_acquisiti = dati.get("documenti_acquisiti", {})
+                        st.session_state.file_letti = set(dati.get("file_letti", []))
+                        st.session_state.storico = dati.get("storico", [])
+                        st.session_state.chat_messages = dati.get("chat_messages", [])
+                        st.session_state.timestamp_analisi = dati.get("timestamp_analisi")
+                        st.success("Sessione ripristinata!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
 
-    with st.expander("📥 Ripristina Backup JSON", expanded=False):
-        file_stato = st.file_uploader("Carica file sessione:", type=["json"], key="loader_sessione", label_visibility="collapsed")
-        if file_stato is not None:
-            if st.button("Conferma Ripristino", use_container_width=True):
-                try:
-                    dati = json.loads(file_stato.read().decode("utf-8"))
-                    st.session_state.gestore_grafo.importa_stato(dati.get("grafo_dati", {}))
-                    st.session_state.dossier_globale = dati.get("dossier_globale")
-                    st.session_state.documenti_acquisiti = dati.get("documenti_acquisiti", {})
-                    st.session_state.file_letti = set(dati.get("file_letti", []))
-                    st.session_state.storico = dati.get("storico", [])
-                    st.session_state.chat_messages = dati.get("chat_messages", [])
-                    st.session_state.timestamp_analisi = dati.get("timestamp_analisi")
-                    st.success("Sessione ripristinata!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore: {e}")
+        if num_nodi > 0:
+            st.markdown(f"<div style='font-size:0.75rem; font-weight:700; color:{c_text_tertiary}; margin: 8px 0 4px 0; text-transform:uppercase;'>Esportazioni Forensi</div>", unsafe_allow_html=True)
+            progetto_pdf_rel = st.session_state.gestore_grafo.esporta_progetto_pdf_relations()
+            st.download_button(
+                label="🔗 Cytoscape (.relazioni.json)",
+                data=json.dumps(progetto_pdf_rel, indent=2, ensure_ascii=False),
+                file_name="indagine_forense.relazioni.json",
+                mime="application/json",
+                use_container_width=True,
+            )
 
-    if num_nodi > 0:
-        st.markdown(f"<div style='font-size:0.75rem; font-weight:700; color:{c_text_tertiary}; margin: 8px 0 4px 0; text-transform:uppercase;'>Esportazioni Forensi</div>", unsafe_allow_html=True)
-        progetto_pdf_rel = st.session_state.gestore_grafo.esporta_progetto_pdf_relations()
-        st.download_button(
-            label="🔗 Cytoscape (.relazioni.json)",
-            data=json.dumps(progetto_pdf_rel, indent=2, ensure_ascii=False),
-            file_name="indagine_forense.relazioni.json",
-            mime="application/json",
-            use_container_width=True,
-        )
+            dati_ftm = st.session_state.gestore_grafo.esporta_followthemoney_jsonl()
+            st.download_button(
+                label="🌐 FollowTheMoney OCCRP (.ftm.json)",
+                data=dati_ftm,
+                file_name="indagine_forense.ftm.json",
+                mime="application/x-jsonlines",
+                use_container_width=True,
+            )
 
-        dati_ftm = st.session_state.gestore_grafo.esporta_followthemoney_jsonl()
-        st.download_button(
-            label="🌐 FollowTheMoney OCCRP (.ftm.json)",
-            data=dati_ftm,
-            file_name="indagine_forense.ftm.json",
-            mime="application/x-jsonlines",
-            use_container_width=True,
-        )
-
-        codice_mmd = st.session_state.gestore_grafo.esporta_mermaid(orientamento="TD")
-        st.download_button(
-            label="🧜 Diagramma Mermaid (.mmd)",
-            data=codice_mmd,
-            file_name="indagine_forense.mmd",
-            mime="text/vnd.mermaid",
-            use_container_width=True,
-        )
-
-    st.markdown('</div>', unsafe_allow_html=True)
+            codice_mmd = st.session_state.gestore_grafo.esporta_mermaid(orientamento="TD")
+            st.download_button(
+                label="🧜 Diagramma Mermaid (.mmd)",
+                data=codice_mmd,
+                file_name="indagine_forense.mmd",
+                mime="text/vnd.mermaid",
+                use_container_width=True,
+            )
 
     # CARD 4: LOG ATTIVO
     st.markdown('<div class="sidebar-section-title"><span class="material-symbols-outlined" style="font-size:16px;">terminal</span> Diagnostica & Log</div>', unsafe_allow_html=True)
-    st.markdown('<div class="apple-card">', unsafe_allow_html=True)
-    with st.expander("Visualizza Log Recente", expanded=False):
-        testo_log = leggi_ultimi_log(max_righe=60)
-        st.markdown(f'<div class="log-box">{testo_log}</div>', unsafe_allow_html=True)
-        if st.button("Aggiorna Log", use_container_width=True):
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        with st.expander("Visualizza Log Recente", expanded=False):
+            testo_log = leggi_ultimi_log(max_righe=60)
+            st.markdown(f'<div class="log-box">{testo_log}</div>', unsafe_allow_html=True)
+            if st.button("Aggiorna Log", use_container_width=True):
+                st.rerun()
 
     # CARD 5: CONTROLLO SERVER
     st.markdown('<div class="sidebar-section-title"><span class="material-symbols-outlined" style="font-size:16px;">power_settings_new</span> Sessione Server</div>', unsafe_allow_html=True)
-    st.markdown('<div class="apple-card">', unsafe_allow_html=True)
-    if st.button("Arresta Server Locale", help="Termina il server Streamlit e rilascia la porta", use_container_width=True):
-        import os, signal
-        st.warning("Arresto del server in corso...")
-        time.sleep(1)
-        os.kill(os.getpid(), signal.SIGTERM)
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        if st.button("Arresta Server Locale", help="Termina il server Streamlit e rilascia la porta", use_container_width=True):
+            import os, signal
+            st.warning("Arresto del server in corso...")
+            time.sleep(1)
+            os.kill(os.getpid(), signal.SIGTERM)
 
 # ==============================================================================
 # INTESTAZIONE PRINCIPALE APPLICAZIONE (Apple Desktop Header)
@@ -619,45 +886,86 @@ with st.container():
                     else:
                         st.warning(f"⚠️ **{f.name}**: Pagine {diag['pagine_senza_ocr']} prive di testo leggibile.")
 
-                # Alert Lunghezza con Bypass
-                if diag["troppo_lungo"] and ok:
-                    if f.name not in st.session_state.file_forzati:
-                        st.warning(f"✂️ **{f.name}**: File di {diag['num_caratteri']:,} caratteri (supera la soglia di {MAX_CARATTERI_CONSIGLIATI:,}).")
-                        if st.button(f"Forza lettura per {f.name}", key=f"force_{f.name}"):
-                            st.session_state.file_forzati.add(f.name)
-                            st.rerun()
-                        ok = False
+                # Avviso non bloccante per atti estesi (es. Visure CCIAA multi-blocco)
+                if diag["num_blocchi"] > 1 and ok:
+                    st.info(f"ℹ️ **{f.name}**: Atto esteso di {diag['num_caratteri']:,} caratteri ({diag['num_blocchi']} blocchi) — analisi sequenziale senza perdita di dettaglio.")
 
-                # Ingestione & Entity Resolution
+                # Ingestione & Entity Resolution con Progresso Incrementale e Token Live
                 if ok:
-                    with st.spinner(f"🔍 [Entity Resolution & Unione della Conoscenza] Analisi incrementale di '{f.name}'..."):
-                        dati_json = estrai_entita_e_relazioni_avanzato(
-                            blocchi_testo=diag["blocchi"],
-                            nome_file=f.name,
-                            model=modello_selezionato,
-                        )
-                        st.session_state.gestore_grafo.aggiungi_dati(dati_json, f.name)
+                    progress_box = st.container()
+                    with progress_box:
+                        prog_bar = st.progress(0.01)
+                        status_text = st.empty()
 
-                        riassunto_rete = st.session_state.gestore_grafo.ottieni_riassunto()
-                        deduzione = genera_deduzioni(
-                            riassunto_grafo=riassunto_rete,
-                            testo_nuovo_documento=diag["testo"],
-                            nome_documento=f.name,
-                            model=modello_selezionato,
-                        )
+                    t_start_acq = time.time()
 
-                        st.session_state.storico.insert(0, {
-                            "file": f.name,
-                            "analisi": deduzione,
-                            "caratteri": diag["num_caratteri"],
-                            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
-                        })
-                        st.session_state.file_letti.add(f.name)
-                        st.session_state.documenti_acquisiti[f.name] = diag
-                        st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-                        st.success(f"✅ Acquisito e integrato nel grafo: {f.name}")
-                        time.sleep(0.4)
-                        st.rerun()
+                    def update_progress(perc: float, msg: str, tokens: int = 0, elapsed: float = 0.0):
+                        p_val = round(min(max(perc, 0.01), 1.0), 2)
+                        prog_bar.progress(p_val)
+
+                        tot_sec = int(time.time() - t_start_acq)
+                        minuti = tot_sec // 60
+                        secondi = tot_sec % 60
+                        timer_str = f"{minuti:02d}:{secondi:02d}s"
+
+                        info_extra = [f"⏱️ Tempo: {timer_str}"]
+                        if tokens > 0:
+                            info_extra.append(f"⚡ Token: {tokens:,}")
+                        info_extra.append("🟢 Apple Silicon Metal M1 Pro")
+                        extra_str = " &nbsp;|&nbsp; ".join(info_extra)
+
+                        status_text.markdown(f"""
+                        <div style="border: 1px solid rgba(10, 132, 255, 0.4); background: {c_card}; border-radius: 12px; padding: 12px 16px; margin: 10px 0; box-shadow: {c_shadow};">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 600; color: {c_blue}; font-size: 0.95rem;">{msg}</span>
+                                <span class="apple-pill pill-blue" style="font-size: 0.85rem; font-weight: 700;">{int(p_val * 100)}%</span>
+                            </div>
+                            <div style="margin-top: 6px; font-size: 0.80rem; color: {c_text_secondary}; display: flex; justify-content: space-between;">
+                                <span>{extra_str}</span>
+                                <span style="color: #30D158; font-weight: 600;">● In elaborazione</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    update_progress(0.05, f"📄 [Fase 1/3] Parsing e analisi diagnostica di '{f.name}'...")
+                    dati_json = estrai_entita_e_relazioni_avanzato(
+                        blocchi_testo=diag["blocchi"],
+                        nome_file=f.name,
+                        model=modello_selezionato,
+                        callback_progresso=update_progress,
+                        base_perc=0.10,
+                        peso_perc=0.60,
+                    )
+                    st.session_state.gestore_grafo.aggiungi_dati(dati_json, f.name)
+
+                    update_progress(0.72, f"🕸️ [Fase 2/3] Fusione e aggiornamento della rete investigativa...")
+                    riassunto_rete = st.session_state.gestore_grafo.ottieni_riassunto()
+
+                    update_progress(0.75, f"🧠 [Fase 3/3] Deduzioni cross-documentali con {modello_selezionato}...")
+                    deduzione = genera_deduzioni(
+                        riassunto_grafo=riassunto_rete,
+                        testo_nuovo_documento=diag["testo"],
+                        nome_documento=f.name,
+                        model=modello_selezionato,
+                        callback_progresso=update_progress,
+                        base_perc=0.75,
+                        peso_perc=0.24,
+                    )
+
+                    t_elapsed = round(time.time() - t_start_acq, 1)
+                    update_progress(1.0, f"✅ Acquisito e integrato nel grafo: {f.name} ({t_elapsed}s)")
+
+                    st.session_state.storico.insert(0, {
+                        "file": f.name,
+                        "analisi": deduzione,
+                        "caratteri": diag["num_caratteri"],
+                        "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+                    })
+                    st.session_state.file_letti.add(f.name)
+                    st.session_state.documenti_acquisiti[f.name] = diag
+                    st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+                    time.sleep(0.5)
+                    st.rerun()
 
 st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 
@@ -770,17 +1078,51 @@ with tab_dossier:
         )
 
     if bottone_dossier and st.session_state.documenti_acquisiti:
-        with st.spinner("Redazione della perizia forense unificata su tutti gli atti del fascicolo..."):
-            testi_per_dossier = {k: v["testo"] for k, v in st.session_state.documenti_acquisiti.items()}
-            dossier_unificato = genera_dossier_forense_globale(
-                gestore_grafo=st.session_state.gestore_grafo,
-                estratti_documenti=testi_per_dossier,
-                model=modello_selezionato,
-                ha_grafo=True,
-            )
-            st.session_state.dossier_globale = dossier_unificato
-            st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
-            st.rerun()
+        progress_dossier = st.container()
+        with progress_dossier:
+            prog_bar_d = st.progress(0.01)
+            status_text_d = st.empty()
+
+        t_start_d = time.time()
+        def update_progress_d(perc: float, msg: str, tokens: int = 0, elapsed: float = 0.0):
+            p_val = round(min(max(perc, 0.01), 1.0), 2)
+            prog_bar_d.progress(p_val)
+            tot_sec = int(time.time() - t_start_d)
+            minuti = tot_sec // 60
+            secondi = tot_sec % 60
+            timer_str = f"{minuti:02d}:{secondi:02d}s"
+
+            info_extra = [f"⏱️ Tempo: {timer_str}"]
+            if tokens > 0:
+                info_extra.append(f"⚡ Token: {tokens:,}")
+            info_extra.append("🟢 Apple Silicon Metal M1 Pro")
+            extra_str = " &nbsp;|&nbsp; ".join(info_extra)
+
+            status_text_d.markdown(f"""
+            <div style="border: 1px solid rgba(10, 132, 255, 0.4); background: {c_card}; border-radius: 12px; padding: 12px 16px; margin: 10px 0; box-shadow: {c_shadow};">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 600; color: {c_blue}; font-size: 0.95rem;">{msg}</span>
+                    <span class="apple-pill pill-blue" style="font-size: 0.85rem; font-weight: 700;">{int(p_val * 100)}%</span>
+                </div>
+                <div style="margin-top: 6px; font-size: 0.80rem; color: {c_text_secondary}; display: flex; justify-content: space-between;">
+                    <span>{extra_str}</span>
+                    <span style="color: #30D158; font-weight: 600;">● In elaborazione</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        testi_per_dossier = {k: v["testo"] for k, v in st.session_state.documenti_acquisiti.items()}
+        dossier_unificato = genera_dossier_forense_globale(
+            gestore_grafo=st.session_state.gestore_grafo,
+            estratti_documenti=testi_per_dossier,
+            model=modello_selezionato,
+            ha_grafo=True,
+            callback_progresso=update_progress_d,
+        )
+        st.session_state.dossier_globale = dossier_unificato
+        st.session_state.timestamp_analisi = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
+        time.sleep(0.5)
+        st.rerun()
 
     if not st.session_state.dossier_globale:
         st.markdown(f"""
@@ -809,19 +1151,26 @@ with tab_dossier:
         except Exception:
             tot_val, n_trans = 0.0, 0
 
+        sogg_ponte = st.session_state.gestore_grafo.trova_soggetti_trasversali()
+        n_ponte = len(sogg_ponte)
+
         st.markdown(f"""
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px;">
             <div class="apple-card" style="padding: 12px 14px;">
-                <div style="font-size: 0.72rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Volume Finanziario Tracciato</div>
-                <div style="font-size: 1.3rem; font-weight: 700; color: #30D158; margin-top: 4px;">€ {tot_val:,.2f}</div>
+                <div style="font-size: 0.70rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Volume Tracciato</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: #30D158; margin-top: 4px;">€ {tot_val:,.2f}</div>
             </div>
             <div class="apple-card" style="padding: 12px 14px;">
-                <div style="font-size: 0.72rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Operazioni Rilevate</div>
-                <div style="font-size: 1.3rem; font-weight: 700; color: {c_blue}; margin-top: 4px;">{n_trans} movimenti</div>
+                <div style="font-size: 0.70rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Operazioni Rilevate</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: {c_blue}; margin-top: 4px;">{n_trans} movimenti</div>
             </div>
             <div class="apple-card" style="padding: 12px 14px;">
-                <div style="font-size: 0.72rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Soggetti Censiti</div>
-                <div style="font-size: 1.3rem; font-weight: 700; color: #BF5AF2; margin-top: 4px;">{len(st.session_state.gestore_grafo.grafo.nodes)} entità</div>
+                <div style="font-size: 0.70rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Soggetti Ponte Multi-Atto</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: #FF9F0A; margin-top: 4px;">{n_ponte} soggetti</div>
+            </div>
+            <div class="apple-card" style="padding: 12px 14px;">
+                <div style="font-size: 0.70rem; color: {c_text_tertiary}; text-transform: uppercase; font-weight: 700;">Entità Censite</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: #BF5AF2; margin-top: 4px;">{len(st.session_state.gestore_grafo.grafo.nodes)} totali</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -864,7 +1213,7 @@ with tab_mappa:
             alt_map = {"Ampio (800px)": 800, "Extra Large (1000px)": 1000, "Full View (1200px)": 1200}
             alt_scelta = alt_map.get(scelta_dim, 800)
 
-        html_path = st.session_state.gestore_grafo.genera_html_mappa(altezza=f"{alt_scelta}px")
+        html_path = st.session_state.gestore_grafo.genera_html_mappa(altezza=f"{alt_scelta}px", tema=st.session_state.tema)
         with open(html_path, "r", encoding="utf-8") as f:
             components.html(f.read(), height=alt_scelta + 10)
 
@@ -903,61 +1252,142 @@ with tab_report_atti:
                 st.markdown(item["analisi"])
 
 # ------------------------------------------------------------------------------
-# TAB 5: PATTERN & SCHEMI TOPOLOGICI AML
+# TAB 5: PATTERN AML & MOTORI INVESTIGATIVI CORE (NETWORKX + OCCRP FtM + DUCKDB)
 # ------------------------------------------------------------------------------
 with tab_schemi:
-    schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
-    if not schemi or (not schemi.get("flussi_circolari") and not schemi.get("hub_dominus") and not schemi.get("scatole_cinesi")):
-        st.info("Nessuno schema o anomalia individuata finora. Carica e analizza il fascicolo.")
+    st.markdown(f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <div>
+            <h3 style="margin: 0; font-size: 1.15rem; color:{c_text_primary};">🎯 Motori Investigativi di Link Analysis & AML</h3>
+            <p style="margin: 3px 0 0 0; color: {c_text_secondary}; font-size: 0.85rem;">
+                Integrazione algoritmica di <strong>NetworkX Centrality</strong> (Dominus & Hub), <strong>OCCRP FollowTheMoney</strong> (Titolare Effettivo UBO) e <strong>DuckDB OLAP</strong> (Riconciliazione Partite).
+            </p>
+        </div>
+        <div>
+            <span class="apple-pill pill-blue">OCCRP + NetworkX + DuckDB</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if len(st.session_state.gestore_grafo.grafo.nodes) == 0:
+        st.info("Nessun dato investigativo da elaborare. Carica gli atti del fascicolo per avviare i motori forensi.")
     else:
-        col_p1, col_p2, col_p3 = st.columns(3)
-        with col_p1:
-            st.markdown(f"<h4 style='color:{c_text_primary};'>🚨 Flussi Circolari (Ring)</h4>", unsafe_allow_html=True)
+        # SEZIONE 1: ANALISI TOPOLOGICA DOMINUS & CENTRALITÀ (NETWORKX)
+        st.markdown(f"<h4 style='color:{c_text_primary}; margin-bottom: 8px;'>👑 1. Analisi Topologica Dominus & Centralità (NetworkX Betweenness)</h4>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: {c_text_secondary}; font-size: 0.82rem;'>L'algoritmo di Betweenness Centrality identifica matematicamente i soggetti che controllano il flusso relazionale o fungono da ponte tra società apparentemente distinte:</p>", unsafe_allow_html=True)
+        
+        centralita_dati = st.session_state.gestore_grafo.calcola_metriche_centralita_forense()
+        if centralita_dati:
+            df_cent = []
+            for c in centralita_dati[:12]:
+                df_cent.append({
+                    "Soggetto": c["nodo"],
+                    "Profilo Investigativo": c["profilo_forense"],
+                    "Betweenness": f"{c['betweenness']:.4f}",
+                    "Flussi In": c["in_degree"],
+                    "Flussi Out": c["out_degree"],
+                    "Atti Coinvolti": c["num_atti"],
+                    "CF / P.IVA": c["cf_piva"],
+                })
+            st.dataframe(pd.DataFrame(df_cent), use_container_width=True, hide_index=True)
+
+        st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
+
+        # SEZIONE 2: TITOLARE EFFETTIVO (UBO) E CATENE DI CONTROLLO (OCCRP FOLLOWTHEMONEY)
+        st.markdown(f"<h4 style='color:{c_text_primary}; margin-bottom: 8px;'>🏢 2. Titolari Effettivi (UBO) e Catene di Partecipazione (FollowTheMoney OCCRP)</h4>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: {c_text_secondary}; font-size: 0.82rem;'>Disvelamento delle strutture societarie e delle holding: individua le persone fisiche al vertice del controllo sostanziale:</p>", unsafe_allow_html=True)
+
+        try:
+            ubos = st.session_state.gestore_grafo.ftm_dataset.risolvi_titolari_effettivi()
+            ubos_rilevanti = [u for u in ubos if u["titolari_effettivi"] or u["amministratori"]]
+            if not ubos_rilevanti:
+                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessuna compagine proprietaria multilivello rilevata.</p>", unsafe_allow_html=True)
+            else:
+                col_u1, col_u2 = st.columns(2)
+                for idx, u in enumerate(ubos_rilevanti):
+                    target_u = col_u1 if idx % 2 == 0 else col_u2
+                    with target_u:
+                        st.markdown(f"""
+                        <div class="apple-card" style="border-left: 3px solid #30D158; padding: 12px 16px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 700; color: #30D158; font-size: 0.95rem;">🏢 {u['azienda']}</span>
+                                <span class="apple-pill pill-green">CF: {u['cf_piva']}</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        if u["titolari_effettivi"]:
+                            st.markdown("<div style='margin-top: 6px; font-size: 0.82rem;'><strong>👑 Titolari Effettivi / Soci:</strong></div>", unsafe_allow_html=True)
+                            for te in u["titolari_effettivi"]:
+                                cat_str = " ➔ ".join(te["catena"])
+                                st.markdown(f"<div style='font-size: 0.80rem; color: {c_text_primary}; margin-left: 8px;'>• <strong>{te['persona']}</strong> ({te['cf']}) — {te['ruolo']} {te['percentuale']}<br/><span style='color:{c_text_secondary}; font-size: 0.76rem;'>Catena: {cat_str}</span></div>", unsafe_allow_html=True)
+
+                        if u["amministratori"]:
+                            st.markdown("<div style='margin-top: 6px; font-size: 0.82rem;'><strong>👔 Organo Amministrativo:</strong></div>", unsafe_allow_html=True)
+                            for am in u["amministratori"]:
+                                st.markdown(f"<div style='font-size: 0.80rem; color: {c_text_secondary}; margin-left: 8px;'>• {am['nominativo']} ({am['cf']}) — {am['ruolo']}</div>", unsafe_allow_html=True)
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Errore calcolo UBO FollowTheMoney: {e}")
+
+        st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
+
+        # SEZIONE 3: RICONCILIAZIONE FINANZIARIA OLAP (DUCKDB)
+        st.markdown(f"<h4 style='color:{c_text_primary}; margin-bottom: 8px;'>🦆 3. Matrice di Riconciliazione Finanziaria e Sbilanci (DuckDB OLAP)</h4>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: {c_text_secondary}; font-size: 0.82rem;'>Incrocio deterministico tra provviste erogate, bonifici incassati e saldi netti per ciascun soggetto:</p>", unsafe_allow_html=True)
+
+        matrice_fin = st.session_state.gestore_grafo.calcola_matrice_riconciliazione_finanziaria()
+        if matrice_fin:
+            df_fin = []
+            for mf in matrice_fin:
+                if mf["entrate_euro"] > 0 or mf["uscite_euro"] > 0:
+                    df_fin.append({
+                        "Soggetto": mf["soggetto"],
+                        "Tipo": mf["tipo"],
+                        "Fondi Entrati (€)": f"€ {mf['entrate_euro']:,.2f}",
+                        "Fondi Usciti (€)": f"€ {mf['uscite_euro']:,.2f}",
+                        "Saldo Netto (€)": f"€ {mf['sbilancio_netto_euro']:,.2f}",
+                        "N. Operazioni In": mf["n_operazioni_in"],
+                        "N. Operazioni Out": mf["n_operazioni_out"],
+                        "CF / P.IVA": mf["cf_piva"],
+                    })
+            if df_fin:
+                st.dataframe(pd.DataFrame(df_fin), use_container_width=True, hide_index=True)
+            else:
+                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessuna movimentazione con importo numerico certo registrata.</p>", unsafe_allow_html=True)
+
+        st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
+
+        # SEZIONE 4: SCHEMI TOPOLOGICI E INCONGRUENZE
+        col_sch1, col_sch2 = st.columns(2)
+        schemi = st.session_state.gestore_grafo.rileva_schemi_investigativi_topologici()
+
+        with col_sch1:
+            st.markdown(f"<h4 style='color:{c_text_primary}; margin-bottom: 8px;'>🚨 Flussi Circolari (Ring)</h4>", unsafe_allow_html=True)
             flussi = schemi.get("flussi_circolari", [])
             if not flussi:
-                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessun circuito chiuso rilevato.</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessun circuito chiuso di rientro fondi rilevato.</p>", unsafe_allow_html=True)
             else:
                 for f in flussi:
                     st.markdown(f"""
-                    <div class="apple-card" style="border-left: 3px solid #FF453A; padding: 10px 14px;">
-                        <span style="font-weight: 700; color: #FF453A; font-size: 0.85rem;">Circuito Chiuso:</span><br/>
-                        <span style="font-size: 0.82rem; color: {c_text_primary};">{' ➔ '.join(f)} ➔ {f[0]}</span>
+                    <div class="apple-card" style="border-left: 3px solid #FF453A; padding: 10px 14px; margin-bottom: 8px;">
+                        <span style="font-weight: 700; color: #FF453A; font-size: 0.85rem;">Circuito Chiuso Rilevato:</span><br/>
+                        <span style="font-size: 0.82rem; color: {c_text_primary};">{' ➔ '.join(f)} ➔ <strong>{f[0]}</strong></span>
                     </div>
                     """, unsafe_allow_html=True)
 
-        with col_p2:
-            st.markdown(f"<h4 style='color:{c_text_primary};'>🌟 Hub / Prestanome (Star)</h4>", unsafe_allow_html=True)
-            hubs = schemi.get("hub_dominus", [])
-            if not hubs:
-                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessun nodo hub anomalo.</p>", unsafe_allow_html=True)
+        with col_sch2:
+            st.markdown(f"<h4 style='color:{c_text_primary}; margin-bottom: 8px;'>⚠️ Contraddizioni e Incongruenze Inter-Atti</h4>", unsafe_allow_html=True)
+            incongruenze = schemi.get("incongruenze", [])
+            if not incongruenze:
+                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessuna contraddizione documentale evidente tra le cariche.</p>", unsafe_allow_html=True)
             else:
-                for h in hubs:
+                for inc in incongruenze[:6]:
                     st.markdown(f"""
-                    <div class="apple-card" style="border-left: 3px solid #FF9F0A; padding: 10px 14px;">
-                        <span style="font-weight: 700; color: #FF9F0A; font-size: 0.88rem;">{h['nodo']}</span><br/>
-                        <span style="font-size: 0.80rem; color: {c_text_secondary};">Grado: {h['connessioni']} | Atti: {h['atti_coinvolti']} | {h['tipo']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        with col_p3:
-            st.markdown(f"<h4 style='color:{c_text_primary};'>🏢 Catene di Controllo (Chain)</h4>", unsafe_allow_html=True)
-            catene_raw = schemi.get("scatole_cinesi", [])
-            catene = []
-            viste_c = set()
-            for c in catene_raw:
-                tup_c = tuple(c)
-                if tup_c not in viste_c:
-                    viste_c.add(tup_c)
-                    catene.append(c)
-
-            if not catene:
-                st.markdown(f"<p style='color: {c_text_tertiary}; font-size: 0.85rem;'>Nessuna catena societaria multilivello.</p>", unsafe_allow_html=True)
-            else:
-                for c in catene[:8]:
-                    st.markdown(f"""
-                    <div class="apple-card" style="border-left: 3px solid #BF5AF2; padding: 10px 14px;">
-                        <span style="font-weight: 700; color: #BF5AF2; font-size: 0.85rem;">Catena di Controllo:</span><br/>
-                        <span style="font-size: 0.82rem; color: {c_text_primary};">{' ➔ '.join(c)}</span>
+                    <div class="apple-card" style="border-left: 3px solid #FF9F0A; padding: 10px 14px; margin-bottom: 8px;">
+                        <span style="font-weight: 700; color: #FF9F0A; font-size: 0.85rem;">[{inc['tipo']}] {inc['soggetto']}</span><br/>
+                        <span style="font-size: 0.80rem; color: {c_text_secondary};">{inc['dettagli']}</span><br/>
+                        <span style="font-size: 0.74rem; color: {c_text_tertiary};">Fonti: {', '.join(inc['fonti'])}</span>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -987,43 +1417,61 @@ with tab_timeline:
             """, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------------------
-# TAB 7: ANAGRAFICHE, CONVERGENZE & SQL DUCKDB
+# TAB 7: ANAGRAFICHE, MATRICE CONVERGENZA & SQL DUCKDB
 # ------------------------------------------------------------------------------
 with tab_convergenze:
-    snodi = st.session_state.gestore_grafo.trova_convergenze_e_snodi()
-    if not snodi:
-        st.info("Nessun soggetto censito al momento.")
-    else:
-        st.markdown(f"<h4 style='color:{c_text_primary};'>🌟 Snodi Chiave e Soggetti Ricorrenti ({len(snodi)} soggetti)</h4>", unsafe_allow_html=True)
-        col_s1, col_s2 = st.columns(2)
-        for idx, s in enumerate(snodi[:10]):
-            target_c = col_s1 if idx % 2 == 0 else col_s2
-            tipo = s.get("tipo", "ALTRO")
-            pill_c = "pill-blue" if tipo == "PERSONA" else ("pill-orange" if tipo == "SOCIETA" else "pill-green")
-            with target_c:
+    # 1. MATRICE DI CONVERGENZA MULTI-ATTO (SOGGETTI TRASVERSALI)
+    sogg_trasv = st.session_state.gestore_grafo.trova_soggetti_trasversali()
+    if sogg_trasv:
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div>
+                <h4 style="margin: 0; color:{c_text_primary};">🔗 Matrice di Convergenza Inter-Documentale ({len(sogg_trasv)} soggetti trasversali)</h4>
+                <p style="margin: 3px 0 0 0; color: {c_text_secondary}; font-size: 0.82rem;">
+                    Soggetti fisici e giuridici censiti contemporaneamente in <strong>2 o più atti distinti</strong> (il collante probatorio dell'inchiesta):
+                </p>
+            </div>
+            <div>
+                <span class="apple-pill pill-orange">Multi-Atto Overlap</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_t1, col_t2 = st.columns(2)
+        for idx, t in enumerate(sogg_trasv):
+            target_t = col_t1 if idx % 2 == 0 else col_t2
+            tipo_t = t.get("tipo", "ALTRO")
+            pill_t = "pill-blue" if tipo_t == "PERSONA" else ("pill-orange" if tipo_t == "SOCIETA" else "pill-green")
+            with target_t:
                 st.markdown(f"""
-                <div class="apple-card" style="border: 1px solid {c_blue_bg}; padding: 14px 18px;">
+                <div class="apple-card" style="border-left: 3px solid #FF9F0A; padding: 12px 16px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 700; color: {c_blue}; font-size: 1.05rem;">{s['id']}</span>
-                        <span class="apple-pill {pill_c}">{tipo}</span>
+                        <span style="font-weight: 700; color: {c_text_primary}; font-size: 0.98rem;">{t['soggetto']}</span>
+                        <span class="apple-pill {pill_t}">{tipo_t}</span>
                     </div>
-                    <div style="margin-top: 6px; font-size: 0.85rem; color: {c_blue};">
-                        <strong>{s.get('ruolo_topologico', '')}</strong>
+                    <div style="margin-top: 5px; font-size: 0.82rem; color: {c_text_secondary};">
+                        <strong>Cod. Fiscale / P.IVA:</strong> {t['cf_piva']} &nbsp;|&nbsp; <strong>Grado:</strong> {t['grado']} connessioni
                     </div>
-                    <div style="margin-top: 6px; font-size: 0.85rem; color: {c_text_primary};">
-                        <strong>Cod. Fiscale / P.IVA:</strong> {s['cf_piva'] or 'Non indicato'}
+                    <div style="margin-top: 6px; font-size: 0.80rem; color: #FF9F0A; font-weight: 600;">
+                        Presente in {t['num_atti']} atti: {', '.join(t['atti'])}
                     </div>
-                    <div style="margin-top: 4px; font-size: 0.82rem; color: {c_text_secondary};">
-                        <strong>Presente in {s['num_atti']} atti:</strong> {', '.join(s['atti'])}
-                    </div>
-                    <div style="margin-top: 6px; font-size: 0.80rem; color: {c_text_tertiary};">
-                        <strong>Legami:</strong> {s['in_entrata']} flussi in entrata | {s['in_uscita']} in uscita
-                    </div>
-                </div>
                 """, unsafe_allow_html=True)
 
+                if t["ruoli_dettaglio"]:
+                    st.markdown("<div style='margin-top: 6px; font-size: 0.78rem; color: {c_text_secondary};'>", unsafe_allow_html=True)
+                    for f_name, r_list in t["ruoli_dettaglio"].items():
+                        st.markdown(f"• <strong>{f_name}</strong>: {'; '.join(r_list[:2])}")
+                    st.markdown("</div>", unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
         st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='color:{c_text_primary};'>📋 Registro Anagrafico Unificato ({len(st.session_state.gestore_grafo.grafo.nodes)} Soggetti Totali)</h4>", unsafe_allow_html=True)
+
+    # 2. REGISTRO ANAGRAFICO UNIFICATO
+    st.markdown(f"<h4 style='color:{c_text_primary};'>📋 Registro Anagrafico Unificato ({len(st.session_state.gestore_grafo.grafo.nodes)} Soggetti Totali)</h4>", unsafe_allow_html=True)
+    if len(st.session_state.gestore_grafo.grafo.nodes) == 0:
+        st.info("Nessun soggetto censito al momento.")
+    else:
         col_e1, col_e2 = st.columns(2)
         nodi_ordinati = sorted(st.session_state.gestore_grafo.grafo.nodes(data=True), key=lambda x: x[0])
         for idx, (nodo_id, data) in enumerate(nodi_ordinati):
@@ -1047,29 +1495,29 @@ with tab_convergenze:
                 </div>
                 """, unsafe_allow_html=True)
 
-        st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='color:{c_text_primary};'>🌐 Analytics FollowTheMoney OCCRP & DuckDB</h4>", unsafe_allow_html=True)
+    st.markdown(f"<hr style='margin: 16px 0; border: none; border-top: 1px solid {c_border};'/>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='color:{c_text_primary};'>🌐 Analytics FollowTheMoney OCCRP & DuckDB</h4>", unsafe_allow_html=True)
 
-        ftm_stats = st.session_state.gestore_grafo.statistiche_ftm()
-        schemi_ftm = ftm_stats.get("per_schema", {})
+    ftm_stats = st.session_state.gestore_grafo.statistiche_ftm()
+    schemi_ftm = ftm_stats.get("per_schema", {})
 
-        col_ftm = st.columns(max(1, len(schemi_ftm)))
-        for idx, (schema_name, conteggio) in enumerate(schemi_ftm.items()):
-            with col_ftm[idx]:
-                st.markdown(f"""
-                <div class="apple-card" style="text-align: center; padding: 10px;">
-                    <div style="font-size: 1.2rem; font-weight: 700; color: {c_blue};">{conteggio}</div>
-                    <div style="font-size: 0.76rem; color: {c_text_secondary}; margin-top: 2px;">{schema_name}</div>
-                </div>
-                """, unsafe_allow_html=True)
+    col_ftm = st.columns(max(1, len(schemi_ftm)))
+    for idx, (schema_name, conteggio) in enumerate(schemi_ftm.items()):
+        with col_ftm[idx]:
+            st.markdown(f"""
+            <div class="apple-card" style="text-align: center; padding: 10px;">
+                <div style="font-size: 1.2rem; font-weight: 700; color: {c_blue};">{conteggio}</div>
+                <div style="font-size: 0.76rem; color: {c_text_secondary}; margin-top: 2px;">{schema_name}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        with st.expander("🦆 Console SQL Forense (DuckDB In-Memory)", expanded=False):
-            st.markdown(f"<p style='color: {c_text_secondary}; font-size: 0.82rem;'>Interroga istantaneamente le tabelle <code>entita</code> e <code>relazioni</code> con query SQL standard:</p>", unsafe_allow_html=True)
-            query_default = "SELECT nome, tipo, cf_piva, num_fonti FROM entita ORDER BY num_fonti DESC, nome ASC LIMIT 20"
-            sql_input = st.text_area("Query SQL:", value=query_default, height=75)
-            if st.button("⚡ Esegui Query SQL"):
-                res_sql = st.session_state.gestore_grafo.esegui_query_sql(sql_input)
-                if res_sql:
-                    st.dataframe(pd.DataFrame(res_sql), use_container_width=True)
-                else:
-                    st.info("Nessun record restituito dalla query.")
+    with st.expander("🦆 Console SQL Forense (DuckDB In-Memory)", expanded=False):
+        st.markdown(f"<p style='color: {c_text_secondary}; font-size: 0.82rem;'>Interroga istantaneamente le tabelle <code>entita</code> e <code>relazioni</code> con query SQL standard:</p>", unsafe_allow_html=True)
+        query_default = "SELECT nome, tipo, cf_piva, num_fonti FROM entita ORDER BY num_fonti DESC, nome ASC LIMIT 20"
+        sql_input = st.text_area("Query SQL:", value=query_default, height=75)
+        if st.button("⚡ Esegui Query SQL"):
+            res_sql = st.session_state.gestore_grafo.esegui_query_sql(sql_input)
+            if res_sql:
+                st.dataframe(pd.DataFrame(res_sql), use_container_width=True)
+            else:
+                st.info("Nessun record restituito dalla query.")

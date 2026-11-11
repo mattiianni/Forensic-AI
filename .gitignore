@@ -32,3 +32,10 @@ grafo.html
 *.jsonl
 *.zip
 *.tar.gz
+
+# Large offline bundles (models, wheels, Ollama runtime, venvs)
+models/
+wheels/
+lib/Ollama.app/
+.venv
+.venv_*/

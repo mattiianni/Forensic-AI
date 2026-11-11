@@ -8,13 +8,13 @@ import bankstatementparser as bsp
 from logger import log
 
 # SOGLIE CONFIGURABILI
-MAX_CARATTERI_CONSIGLIATI = 25000  # Soglia per blocco singolo
-MIN_CARATTERI_PER_PAGINA = 40      # Soglia sotto la quale la pagina è priva di testo selezionabile
+MAX_CARATTERI_CONSIGLIATI = 500000  # Nessuna restrizione o blocco per Visure CCIAA o atti estesi
+MIN_CARATTERI_PER_PAGINA = 40       # Soglia sotto la quale la pagina è priva di testo selezionabile
 
 
-def suddividi_in_blocchi(testo: str, dimensione_blocco: int = 22000, sovrapposizione: int = 2000) -> list[str]:
+def suddividi_in_blocchi(testo: str, dimensione_blocco: int = 35000, sovrapposizione: int = 3000) -> list[str]:
     """
-    Suddivide documenti complessi e lunghi (perizie, rogiti, bilanci estesi, fascicoli processuali)
+    Suddivide documenti complessi e lunghi (visure CCIAA estese, bilanci, rogiti, fascicoli processuali)
     in blocchi sovrapposti (sliding window) per garantire che l'LLM non perda dettagli cruciali.
     """
     if len(testo) <= dimensione_blocco:
@@ -209,7 +209,7 @@ def analizza_ed_estrai(file_caricato) -> dict:
         "pagine_senza_ocr": pagine_senza_ocr,
         "manca_ocr": len(pagine_senza_ocr) > 0,
         "perc_senza_ocr": perc_senza_ocr,
-        "troppo_lungo": num_caratteri > MAX_CARATTERI_CONSIGLIATI,
+        "troppo_lungo": False,  # Nessun blocco restrittivo: acquisizione automatica fluida
         "estensione": estensione,
     }
 

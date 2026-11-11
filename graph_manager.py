@@ -656,11 +656,17 @@ class GestoreGrafo:
         eventi_con_data.sort(key=chiave_data, reverse=True)
         return eventi_con_data + eventi_senza_data
 
-    def genera_html_mappa(self, file_path: str = "grafo.html", altezza: str = "850px") -> str:
-        return self.esporta_grafo_html(file_path, altezza=altezza)
+    def genera_html_mappa(self, file_path: str = "grafo.html", altezza: str = "850px", tema: str = "dark") -> str:
+        return self.esporta_grafo_html(file_path, altezza=altezza, tema=tema)
 
-    def esporta_grafo_html(self, file_path: str = "grafo.html", altezza: str = "850px") -> str:
-        net = Network(height=altezza, width="100%", bgcolor="#0d1117", font_color="#FFFFFF", directed=True)
+    def esporta_grafo_html(self, file_path: str = "grafo.html", altezza: str = "850px", tema: str = "dark") -> str:
+        is_light = (tema == "light")
+        bg_col = "#F8F9FA" if is_light else "#0d1117"
+        font_col = "#1D1D1F" if is_light else "#FFFFFF"
+        edge_col = {"color": "#0071E3", "highlight": "#0056B3"} if is_light else {"color": "#58a6ff", "highlight": "#38bdf8"}
+        edge_font = {"color": "#4B5563", "size": 11, "align": "middle", "background": "rgba(255, 255, 255, 0.85)"} if is_light else {"color": "#8b949e", "size": 11, "align": "middle"}
+
+        net = Network(height=altezza, width="100%", bgcolor=bg_col, font_color=font_col, directed=True)
         net.force_atlas_2based(
             gravity=-120,
             central_gravity=0.015,
@@ -683,7 +689,7 @@ class GestoreGrafo:
                 title=data.get("title", node_id),
                 color=data.get("color", "#8E8E93"),
                 size=nodo_size,
-                font={"color": "#FFFFFF", "size": 15, "face": "SF Pro Display, -apple-system, sans-serif"},
+                font={"color": font_col, "size": 15, "face": "SF Pro Display, -apple-system, sans-serif"},
                 borderWidth=2,
             )
 
@@ -697,9 +703,9 @@ class GestoreGrafo:
                 v,
                 label=label_arco,
                 title=data.get("title", ""),
-                color={"color": "#58a6ff", "highlight": "#38bdf8"},
+                color=edge_col,
                 arrows={"to": {"enabled": True, "scaleFactor": 1.2}},
-                font={"color": "#8b949e", "size": 11, "align": "middle"},
+                font=edge_font,
                 width=2 if val > 0 else 1,
             )
 
@@ -811,10 +817,156 @@ class GestoreGrafo:
 
         return "\n".join(linee)
 
+    def calcola_metriche_centralita_forense(self) -> list[dict]:
+        """
+        Algoritmo di Centralità Topologica NetworkX (ispirato ai motori di link analysis tipo Maltego/Palantir):
+        - Betweenness Centrality: identifica i nodi "ponte" strategici o i Dominus occulti che collegano cluster altrimenti separati.
+        - In-Degree / Out-Degree: distingue le cartiere (outflow massivo) dalle casseforti patrimoniali (inflow massivo).
+        - PageRank: misura l'autorevolezza e l'influenza relazionale nella rete.
+        """
+        if len(self.grafo.nodes) == 0:
+            return []
+
+        try:
+            grafo_semplice = nx.DiGraph(self.grafo)
+            betweenness = nx.betweenness_centrality(grafo_semplice, normalized=True)
+            degree = dict(self.grafo.degree())
+            in_deg = dict(self.grafo.in_degree())
+            out_deg = dict(self.grafo.out_degree())
+            try:
+                pagerank = nx.pagerank(grafo_semplice, alpha=0.85, max_iter=200)
+            except Exception:
+                pagerank = {n: 0.0 for n in self.grafo.nodes}
+
+            risultati = []
+            for n in self.grafo.nodes():
+                meta = self.dati_nodi.get(n, {})
+                tipo = meta.get("tipo", "ALTRO")
+                cf = meta.get("cf_piva", "N/D")
+                fonti = meta.get("fonti", set())
+                bw = betweenness.get(n, 0.0)
+                pr = pagerank.get(n, 0.0)
+                tot_d = degree.get(n, 0)
+                i_d = in_deg.get(n, 0)
+                o_d = out_deg.get(n, 0)
+
+                # Classificazione Forense
+                if bw >= 0.15 or (tot_d >= 5 and len(fonti) >= 2):
+                    profilo = "👑 DOMINUS / SNODO STRATEGICO"
+                elif o_d >= 3 and i_d <= 1:
+                    profilo = "📤 CARTIERA / ORIGINATORE FLUSSI"
+                elif i_d >= 3 and o_d <= 1:
+                    profilo = "📥 CASSAFORTE / TERMINALE"
+                elif len(fonti) >= 2 and tot_d >= 2:
+                    profilo = "🔗 INTERPOSTO / CONNETTORE MULTI-ATTO"
+                else:
+                    profilo = "SOGGETTO OPERATIVO"
+
+                risultati.append({
+                    "nodo": n,
+                    "tipo": tipo,
+                    "cf_piva": cf,
+                    "betweenness": bw,
+                    "pagerank": pr,
+                    "grado_totale": tot_d,
+                    "in_degree": i_d,
+                    "out_degree": o_d,
+                    "num_atti": len(fonti),
+                    "fonti": sorted(list(fonti)),
+                    "profilo_forense": profilo,
+                })
+
+            risultati.sort(key=lambda x: (x["betweenness"], x["grado_totale"], x["num_atti"]), reverse=True)
+            return risultati
+        except Exception as e:
+            log.error(f"Errore calcolo centralità forense: {e}", exc_info=True)
+            return []
+
+    def calcola_matrice_riconciliazione_finanziaria(self) -> list[dict]:
+        """
+        Motore di Riconciliazione Finanziaria OLAP in DuckDB:
+        Calcola per ciascun soggetto il totale dei fondi in entrata (ricevuti),
+        il totale dei fondi in uscita (bonificati/ceduti), il saldo netto tracciato,
+        il numero di operazioni e gli atti di riferimento.
+        """
+        try:
+            query = """
+            WITH entrate AS (
+                SELECT destinazione as soggetto, SUM(valore_numerico) as tot_entrata, COUNT(*) as num_in
+                FROM relazioni
+                WHERE valore_numerico > 0
+                GROUP BY destinazione
+            ),
+            uscite AS (
+                SELECT sorgente as soggetto, SUM(valore_numerico) as tot_uscita, COUNT(*) as num_out
+                FROM relazioni
+                WHERE valore_numerico > 0
+                GROUP BY sorgente
+            ),
+            unione AS (
+                SELECT soggetto FROM entrate
+                UNION
+                SELECT soggetto FROM uscite
+            )
+            SELECT 
+                u.soggetto,
+                COALESCE(e.tot_entrata, 0.0) as entrate_euro,
+                COALESCE(s.tot_uscita, 0.0) as uscite_euro,
+                (COALESCE(e.tot_entrata, 0.0) - COALESCE(s.tot_uscita, 0.0)) as sbilancio_netto_euro,
+                COALESCE(e.num_in, 0) as n_operazioni_in,
+                COALESCE(s.num_out, 0) as n_operazioni_out
+            FROM unione u
+            LEFT JOIN entrate e ON u.soggetto = e.soggetto
+            LEFT JOIN uscite s ON u.soggetto = s.soggetto
+            ORDER BY (COALESCE(e.tot_entrata, 0.0) + COALESCE(s.tot_uscita, 0.0)) DESC
+            """
+            df = self.db.execute(query).fetchdf()
+            records = df.to_dict(orient="records")
+            for r in records:
+                s_id = r["soggetto"]
+                meta = self.dati_nodi.get(s_id, {})
+                r["tipo"] = meta.get("tipo", "ALTRO")
+                r["cf_piva"] = meta.get("cf_piva", "N/D")
+                r["fonti"] = sorted(list(meta.get("fonti", set())))
+            return records
+        except Exception as e:
+            log.error(f"Errore riconciliazione finanziaria DuckDB: {e}", exc_info=True)
+            return []
+
+    def trova_soggetti_trasversali(self) -> list[dict]:
+        """
+        Identifica i soggetti presenti in 2 o più atti documentali distinti.
+        Rappresentano la matrice di convergenza probatoria e il collante dell'inchiesta.
+        """
+        trasversali = []
+        for n, meta in self.dati_nodi.items():
+            fonti = meta.get("fonti", set())
+            if len(fonti) >= 2:
+                ruoli_per_atto = {}
+                for u, v, data in self.grafo.edges(data=True):
+                    fnt = data.get("fonte", "")
+                    if u == n:
+                        ruoli_per_atto.setdefault(fnt, []).append(f"Dispone {data.get('label')} verso {v}")
+                    if v == n:
+                        ruoli_per_atto.setdefault(fnt, []).append(f"Riceve {data.get('label')} da {u}")
+
+                trasversali.append({
+                    "soggetto": n,
+                    "tipo": meta.get("tipo", "ALTRO"),
+                    "cf_piva": meta.get("cf_piva", "N/D"),
+                    "num_atti": len(fonti),
+                    "atti": sorted(list(fonti)),
+                    "ruoli_dettaglio": ruoli_per_atto,
+                    "grado": self.grafo.degree(n),
+                })
+        trasversali.sort(key=lambda x: (x["num_atti"], x["grado"]), reverse=True)
+        return trasversali
+
     def costruisci_quadro_globale_per_llm(self) -> str:
         """
         Genera una Matrice Computazionale Forense approfondita per l'LLM,
-        estraendo da DuckDB e NetworkX tutte le cifre, le anagrafiche, i flussi di denaro e le incongruenze.
+        estraendo da DuckDB, NetworkX e FollowTheMoney tutte le metriche,
+        le anagrafiche trasversali, i titolari effettivi, i flussi di denaro e le incongruenze.
         """
         if len(self.grafo.nodes) == 0:
             return "Nessuna entità o relazione rilevata nel fascicolo."
@@ -822,31 +974,74 @@ class GestoreGrafo:
         righe = []
         tot_nodi = len(self.grafo.nodes)
         tot_archi = len(self.grafo.edges)
-        righe.append(f"METRICHE GRAFO: {tot_nodi} Entità Univoche, {tot_archi} Relazioni/Transazioni, {len(self.file_fonti)} Atti Documentali Acquisiti.")
+        righe.append(f"METRICHE COMPUTAZIONALI DEL FASCICOLO: {tot_nodi} Entità Univoche, {tot_archi} Relazioni/Transazioni, {len(self.file_fonti)} Atti Acquisiti.")
 
-        # 1. Calcolo Volume Finanziario Complessivo tracciato con DuckDB
+        # 1. Volume Finanziario Complessivo tracciato con DuckDB
         try:
             res_vol = self.db.execute("SELECT SUM(valore_numerico) as tot_euro, COUNT(*) as n_trans FROM relazioni WHERE valore_numerico > 0").fetchall()
             if res_vol and res_vol[0][0]:
                 tot_euro = res_vol[0][0]
                 n_tr = res_vol[0][1]
-                righe.append(f"VOLUME FINANZIARIO COMPLESSIVO TRACCIATO: € {tot_euro:,.2f} (in {n_tr} operazioni con importo certo).")
+                righe.append(f"VOLUME FINANZIARIO COMPLESSIVO TRACCIATO: € {tot_euro:,.2f} (in {n_tr} operazioni con importo documentato).")
         except Exception:
             pass
 
-        # 2. Soggetti Chiave, Dominus e Prestanome (Ordinati per grado e trasversalità)
-        snodi = self.trova_convergenze_e_snodi()
-        if snodi:
-            righe.append("\nSOGGETTI CHIAVE E RUOLI STRATEGICI TRA GLI ATTI:")
-            for s in snodi[:12]:
-                fonti_str = ", ".join(s["fonti"])
-                ruoli_str = "; ".join(s.get("ruoli_rilevati", []))[:120]
-                righe.append(f"- {s['soggetto']} (Tipo: {s['tipo']}, CF/PIVA: {s['cf_piva']}): {s['ruolo_topologico']}. Presente in {s['atti_coinvolti']} atti distinti ({fonti_str}). Ruoli emersi: [{ruoli_str}].")
+        # 2. Matrice Soggetti Trasversali (presenti in più atti)
+        trasversali = self.trova_soggetti_trasversali()
+        if trasversali:
+            righe.append(f"\n=======================================================")
+            righe.append(f"MATRICE DI CONVERGENZA MULTI-ATTO (Soggetti presenti in 2 o più atti distinti):")
+            righe.append(f"=======================================================")
+            for t in trasversali[:12]:
+                f_list = ", ".join(t["atti"])
+                righe.append(f"• {t['soggetto']} ({t['tipo']}, CF: {t['cf_piva']}) — CENSITO IN {t['num_atti']} ATTI: [{f_list}] (Grado connessione: {t['grado']})")
+                for f_name, r_list in t["ruoli_dettaglio"].items():
+                    righe.append(f"    - In atto '{f_name}': {'; '.join(r_list[:3])}")
 
-        # 3. Flussi Circolari e Pattern di Riciclaggio
+        # 3. Risultanze Algoritmo Centralità NetworkX (Dominus vs Cartiere vs Terminali)
+        centralita = self.calcola_metriche_centralita_forense()
+        top_dominus = [c for c in centralita if "DOMINUS" in c["profilo_forense"] or c["betweenness"] > 0.05]
+        if top_dominus:
+            righe.append(f"\n=======================================================")
+            righe.append(f"ANALISI TOPOLOGICA DOMINUS & SNODI STRATEGICI (NetworkX Betweenness Centrality):")
+            righe.append(f"=======================================================")
+            for d in top_dominus[:8]:
+                righe.append(f"• {d['nodo']} ({d['tipo']}, CF: {d['cf_piva']}): Classificazione = {d['profilo_forense']} (Betweenness: {d['betweenness']:.3f}, Flussi In: {d['in_degree']}, Flussi Out: {d['out_degree']}, Presente in {d['num_atti']} atti)")
+
+        # 4. Titolari Effettivi (UBO) e Assetti di Controllo (FollowTheMoney OCCRP)
+        try:
+            ubos = self.ftm_dataset.risolvi_titolari_effettivi()
+            aziende_con_dati = [u for u in ubos if u["titolari_effettivi"] or u["amministratori"]]
+            if aziende_con_dati:
+                righe.append(f"\n=======================================================")
+                righe.append(f"TITOLARI EFFETTIVI E ASSETTO DI CONTROLLO SOCIETARIO (FollowTheMoney OCCRP):")
+                righe.append(f"=======================================================")
+                for u in aziende_con_dati[:8]:
+                    righe.append(f"• Società: {u['azienda']} (P.IVA/CF: {u['cf_piva']}):")
+                    for te in u["titolari_effettivi"]:
+                        catena_str = " -> ".join(te["catena"])
+                        righe.append(f"    - Titolare Effettivo / Socio: {te['persona']} (CF: {te['cf']}) | {te['ruolo']} {te['percentuale']} [Catena: {catena_str}]")
+                    for am in u["amministratori"]:
+                        righe.append(f"    - Rappresentanza / Governance: {am['nominativo']} (CF: {am['cf']}) | Ruolo: {am['ruolo']}")
+        except Exception as e:
+            log.debug(f"Errore UBO per LLM: {e}")
+
+        # 5. Riconciliazione Partite e Flussi Finanziari (DuckDB Ledger)
+        matrice_fin = self.calcola_matrice_riconciliazione_finanziaria()
+        if matrice_fin:
+            righe.append(f"\n=======================================================")
+            righe.append(f"MATRICE RICONCILIAZIONE FINANZIARIA PER SOGGETTO (DuckDB OLAP):")
+            righe.append(f"=======================================================")
+            for mf in matrice_fin[:12]:
+                if mf['entrate_euro'] > 0 or mf['uscite_euro'] > 0:
+                    righe.append(f"• {mf['soggetto']} ({mf['tipo']}): Ricevuti € {mf['entrate_euro']:,.2f} ({mf['n_operazioni_in']} op.) | Disposti € {mf['uscite_euro']:,.2f} ({mf['n_operazioni_out']} op.) | Saldo Netto Tracciato: € {mf['sbilancio_netto_euro']:,.2f}")
+
+        # 6. Flussi Circolari e Pattern di Riciclaggio
         schemi = self.rileva_schemi_investigativi_topologici()
         if schemi["flussi_circolari"]:
-            righe.append(f"\n🚨 ALLERTA AML: RILEVATI {len(schemi['flussi_circolari'])} FLUSSI CIRCOLARI / ROUND-TRIPPING (RING):")
+            righe.append(f"\n=======================================================")
+            righe.append(f"🚨 ALLERTA RICICLAGGIO: RILEVATI {len(schemi['flussi_circolari'])} FLUSSI CIRCOLARI (ROUND-TRIPPING):")
+            righe.append(f"=======================================================")
             for c in schemi["flussi_circolari"]:
                 righe.append(f"  * {' ➔ '.join(c)} ➔ {c[0]}")
 
@@ -858,17 +1053,19 @@ class GestoreGrafo:
                 if tup not in viste:
                     viste.add(tup)
                     catene_uniche.append(c)
-            righe.append(f"\n🏢 HOLDING E SCATOLE CINESI (CHAIN): {len(catene_uniche)} catene di controllo a più livelli:")
+            righe.append(f"\n🏢 CATENE SOCIETARIE A SCHERMO / SCATOLE CINESI: {len(catene_uniche)} livelli rilevati:")
             for cat in catene_uniche[:8]:
                 righe.append(f"  * {' ➔ '.join(cat)}")
 
-        # 4. Incongruenze e Contraddizioni Probatone
+        # 7. Incongruenze e Contraddizioni tra Atti Diversi
         if schemi["incongruenze"]:
-            righe.append(f"\n⚠️ INCONGRUENZE E CONFLITTI DI RUOLO RILEVATI TRA ATTI DIVERSI:")
-            for inc in schemi["incongruenze"][:8]:
+            righe.append(f"\n=======================================================")
+            righe.append(f"⚠️ CONTRADDIZIONI E DISCREPANZE RILEVATE TRA ATTI DIVERSI:")
+            righe.append(f"=======================================================")
+            for inc in schemi["incongruenze"][:10]:
                 righe.append(f"  * [{inc['tipo']}] {inc['soggetto']}: {inc['dettagli']} (Fonti: {', '.join(inc['fonti'])})")
 
-        # 5. Tabella Completa Transazioni e Rapporti Economici estratti con DuckDB
+        # 8. Transazioni e Movimentazioni Bancarie Puntuali (DuckDB)
         try:
             res_rel = self.db.execute("""
                 SELECT sorgente, tipo, destinazione, valore_numerico, data_evento, dettagli, fonte
@@ -878,12 +1075,14 @@ class GestoreGrafo:
             """).fetchall()
 
             if res_rel:
-                righe.append("\nTRANSAZIONI, BONIFICI E RAPPORTI GIURIDICI SALIENTI (Rilevati dai documenti):")
+                righe.append(f"\n=======================================================")
+                righe.append(f"REGISTRO MOVIMENTAZIONI E TRANSAZIONI DOCUMENTATE (DuckDB):")
+                righe.append(f"=======================================================")
                 for r in res_rel:
                     src, tip, dst, val, data_ev, dett, fnt = r
                     val_str = f" [€ {val:,.2f}]" if val and val > 0 else ""
                     dt_str = f" in data {data_ev}" if data_ev else ""
-                    righe.append(f"- {src} --[{tip}{val_str}{dt_str}]--> {dst} | Rif: {dett} (Fonte: {fnt})")
+                    righe.append(f"- {src} --[{tip}{val_str}{dt_str}]--> {dst} | Note: {dett} (Fonte: {fnt})")
         except Exception as e:
             log.debug(f"Errore query relazioni per LLM: {e}")
 
