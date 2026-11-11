@@ -218,12 +218,19 @@ h4 { font-size: 13px; font-weight: 600; }
 .area-tab[data-area="ricerca"].active .area-ico { background: var(--accent-soft); color: var(--accent); }
 .area-tab[data-area="forensic"].active .area-ico { background: var(--purple-soft); color: var(--purple); }
 
-.body { display: grid; grid-template-columns: 290px 1fr; min-height: 0; }
+.body { --sb-w: 290px; display: grid; grid-template-columns: var(--sb-w) 1fr; min-height: 0; }
+.body.sb-resizing, .body.sb-resizing * { cursor: col-resize !important; user-select: none; }
+/* Maniglia per allargare/restringere la barra laterale (doppio clic: larghezza standard) */
+.sb-resizer { position: absolute; top: 0; right: -5px; width: 10px; height: 100%; cursor: col-resize; z-index: 5; }
+.sb-resizer::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+.sb-resizer:hover::after, .body.sb-resizing .sb-resizer::after { background: var(--accent); }
+.body.sidebar-hidden .sb-resizer { display: none; }
 .body.sidebar-hidden { grid-template-columns: 0 1fr; }
 .body.sidebar-hidden .sidebar { visibility: hidden; }
 
 /* ── Sidebar fascicolo ───────────────────────────────────────────────────── */
 .sidebar {
+  position: relative; z-index: 3;
   display: flex; flex-direction: column; min-height: 0;
   background: var(--sidebar);
   backdrop-filter: saturate(180%) blur(30px);

@@ -79,6 +79,7 @@ const FT = {
     });
     $$('.area-tab').forEach(b => b.addEventListener('click', () => this.setArea(b.dataset.area)));
     $('#btn-sidebar').addEventListener('click', () => this.toggleSidebar());
+    this.initSidebarResize();
     $('#btn-fascicolo').addEventListener('click', (e) => this.fascicoloMenu(e.currentTarget));
     $('#btn-model').addEventListener('click', (e) => this.modelMenu(e.currentTarget));
     $('#btn-settings').addEventListener('click', (e) => this.settingsMenu(e.currentTarget));
@@ -91,6 +92,7 @@ const FT = {
 
     const prefs = await this.api('/api/prefs').catch(() => ({}));
     if (prefs.sidebar_hidden) this.toggleSidebar(true);
+    if (prefs.sidebar_width) this.setSidebarWidth(prefs.sidebar_width);
     await this.loadModels(prefs.model);
     const f = await this.api('/api/fascicoli');
     this.setFascicolo(f.corrente, false);
@@ -108,6 +110,36 @@ const FT = {
     this.emit('area', area);
   },
 
+  setSidebarWidth(w) {
+    const max = Math.max(240, Math.min(720, window.innerWidth - 640));
+    w = Math.round(Math.max(220, Math.min(max, w)));
+    $('#body').style.setProperty('--sb-w', w + 'px');
+    return w;
+  },
+  initSidebarResize() {
+    const handle = $('#sb-resizer'), body = $('#body');
+    let startX = 0, startW = 0, w = 0;
+    const move = (e) => { w = this.setSidebarWidth(startW + e.clientX - startX); };
+    const up = () => {
+      body.classList.remove('sb-resizing');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      this.api('/api/prefs', { body: { sidebar_width: w } }).catch(() => {});
+      window.dispatchEvent(new Event('resize'));
+    };
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      startX = e.clientX; startW = w = $('#sidebar').getBoundingClientRect().width;
+      body.classList.add('sb-resizing');
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+    handle.addEventListener('dblclick', () => {
+      w = this.setSidebarWidth(290);
+      this.api('/api/prefs', { body: { sidebar_width: w } }).catch(() => {});
+      window.dispatchEvent(new Event('resize'));
+    });
+  },
   toggleSidebar(force) {
     const body = $('#body');
     const hidden = force !== undefined ? force : !body.classList.contains('sidebar-hidden');
@@ -302,7 +334,7 @@ const FT = {
         }
         return `<div class="doc-item" data-id="${d.id}" title="${esc(d.sorgente || d.nome)}">
           <div class="doc-ico ${cls}">${icon(ic)}</div>
-          <div style="min-width:0"><div class="doc-name">${esc(d.nome)}</div><div class="doc-meta">${meta}</div></div>
+          <div style="min-width:0"><div class="doc-name" title="${esc(d.nome)}">${esc(d.nome)}</div><div class="doc-meta">${meta}</div></div>
           <div class="doc-state">${this.docStateIcon(d)}<button class="icon-btn doc-menu" style="width:24px;height:24px">${icon('more_horiz', 'sm')}</button></div>
         </div>`;
       }).join('');
