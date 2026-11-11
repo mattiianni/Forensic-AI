@@ -39,3 +39,6 @@ wheels/
 lib/Ollama.app/
 .venv
 .venv_*/
+
+# Build
+dist/

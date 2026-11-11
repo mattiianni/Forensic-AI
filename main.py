@@ -1,0 +1,154 @@
+"""
+Forensic Tools — punto di ingresso.
+
+1. Configura gli strumenti inclusi (Tesseract, Ghostscript, pango) e il motore Ollama privato.
+2. Avvia il server Flask locale su una porta libera (solo 127.0.0.1).
+3. Apre la finestra nativa macOS (WebKit) con l'interfaccia.
+"""
+from __future__ import annotations
+
+import json
+import os
+import socket
+import subprocess
+import sys
+import threading
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from server import runtime  # noqa: E402
+
+runtime.setup_environment()
+
+import webview  # noqa: E402
+from webview.dom import DOMEventHandler  # noqa: E402
+
+webview.settings["DRAG_REGION_SELECTOR"] = ".drag"
+webview.settings["DRAG_REGION_DIRECT_TARGET_ONLY"] = True
+webview.settings["ALLOW_DOWNLOADS"] = True
+
+from server.app import create_app  # noqa: E402
+
+window: webview.Window | None = None
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def _system_dark() -> bool:
+    try:
+        out = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True)
+        return "Dark" in out.stdout
+    except Exception:
+        return False
+
+
+class NativeAPI:
+    """Funzioni native esposte a JavaScript come window.pywebview.api.*"""
+
+    def choose_folder(self, title: str = "Scegli una cartella"):
+        res = window.create_file_dialog(webview.FileDialog.FOLDER)
+        return res[0] if res else None
+
+    def choose_files(self, multiple: bool = True):
+        res = window.create_file_dialog(webview.FileDialog.OPEN, allow_multiple=multiple)
+        return list(res) if res else []
+
+    def save_file(self, filename: str):
+        res = window.create_file_dialog(webview.FileDialog.SAVE, save_filename=filename)
+        if not res:
+            return None
+        return res if isinstance(res, str) else res[0]
+
+    def set_title(self, title: str):
+        window.title = title
+
+    def set_appearance(self, dark: bool):
+        """Allinea barra del titolo nativa e tema dell'interfaccia (Sistema/Chiaro/Scuro)."""
+        _apply_window_appearance(bool(dark))
+
+    def zoom(self):
+        """Doppio clic sulla toolbar: ingrandisci/ripristina (comportamento standard macOS)."""
+        try:
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(lambda: window.native.zoom_(None))
+        except Exception:
+            pass
+
+
+def _on_drop(event):
+    """Trascinamento dal Finder: inoltra i percorsi reali all'interfaccia."""
+    files = event.get("dataTransfer", {}).get("files", [])
+    paths = [f.get("pywebviewFullPath") for f in files if f.get("pywebviewFullPath")]
+    if paths and window:
+        window.evaluate_js(f"window.FT && FT.onNativeDrop({json.dumps(paths)})")
+
+
+TOOLBAR_RGB = {True: (40, 40, 42), False: (246, 246, 248)}   # = --toolbar in ui/css/app.css
+
+
+def _apply_window_appearance(dark: bool):
+    """
+    Barra del titolo nativa trasparente, senza titolo né separatore, dello stesso colore
+    della toolbar HTML: i semafori restano nella barra nativa e il contenuto non viene coperto.
+    (Non si usa FullSizeContentView: WKWebView finirebbe sotto la barra del titolo.)
+    """
+    try:
+        from AppKit import NSAppearance, NSColor
+        from PyObjCTools import AppHelper
+
+        def apply():
+            w = window.native
+            if w is None:
+                return
+            r, g, b = TOOLBAR_RGB[dark]
+            w.setTitlebarAppearsTransparent_(True)
+            w.setTitleVisibility_(1)                 # NSWindowTitleHidden
+            try:
+                w.setTitlebarSeparatorStyle_(1)      # NSTitlebarSeparatorStyleNone
+            except Exception:
+                pass
+            w.setAppearance_(NSAppearance.appearanceNamed_(
+                "NSAppearanceNameDarkAqua" if dark else "NSAppearanceNameAqua"))
+            w.setBackgroundColor_(NSColor.colorWithSRGBRed_green_blue_alpha_(r / 255, g / 255, b / 255, 1.0))
+        AppHelper.callAfter(apply)
+    except Exception:
+        pass
+
+
+def _style_native_window():
+    _apply_window_appearance(_system_dark())
+
+
+def _on_loaded():
+    window.dom.document.events.drop += DOMEventHandler(_on_drop, True, True)
+
+
+def main():
+    global window
+    runtime.start_ollama()
+    port = _free_port()
+    app = create_app()
+    threading.Thread(target=lambda: app.run(host="127.0.0.1", port=port, threaded=True, use_reloader=False),
+                     daemon=True).start()
+
+    dark = _system_dark()
+    window = webview.create_window(
+        runtime.APP_NAME, f"http://127.0.0.1:{port}/", js_api=NativeAPI(),
+        width=1440, height=920, min_size=(1100, 700),
+        background_color="#1C1C1E" if dark else "#F5F5F7", text_select=True,
+    )
+    window.events.loaded += _on_loaded
+    window.events.shown += _style_native_window
+    try:
+        webview.start(debug=bool(os.environ.get("FT_DEBUG")), private_mode=False,
+                      storage_path=str(runtime.CACHE_DIR / "webview"))
+    finally:
+        runtime.stop_ollama()
+
+
+if __name__ == "__main__":
+    main()
