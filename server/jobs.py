@@ -54,6 +54,11 @@ def progress(job_id: str, fraction: float, message: str = "", **extra):
     emit(job_id, {"type": "progress", "fraction": max(0.0, min(1.0, fraction)), "message": message, **extra})
 
 
+def log(job_id: str, message: str, level: str = "info"):
+    """Riga per la finestra di log (stesso evento usato dalla pipeline Pdf50)."""
+    emit(job_id, {"type": "log", "message": message, "level": level})
+
+
 def is_cancelled(job_id: str) -> bool:
     with _lock:
         return bool(_jobs.get(job_id, {}).get("cancelled"))
@@ -78,6 +83,7 @@ def run(job_id: str, target, *args, **kwargs):
         try:
             target(job_id, *args, **kwargs)
         except Exception as e:  # noqa: BLE001
+            emit(job_id, {"type": "log", "level": "error", "message": f"ERRORE: {e}"})
             emit(job_id, {"type": "fatal_error", "message": str(e), "detail": traceback.format_exc()})
         finally:
             finish(job_id)
@@ -91,12 +97,27 @@ def active(fid: str | None = None) -> list[dict]:
         out = []
         for j in _jobs.values():
             if j["status"] == "running" and (fid is None or j.get("fid") in (fid, None)):
+                lv = [e.get("level") for e in j["events"] if e.get("type") == "log"]
                 out.append({"id": j["id"], "kind": j["kind"], "label": j["label"],
                             "progress": j["progress"], "message": j["message"],
-                            "elapsed": int(now - j["created_at"])})
+                            "elapsed": int(now - j["created_at"]),
+                            "errors": lv.count("error"), "warnings": lv.count("warning")})
         # pulizia job conclusi da più di un'ora
         for k in [k for k, j in _jobs.items() if j["status"] == "done" and now - j["created_at"] > 3600]:
             del _jobs[k]
+        return out
+
+
+def recent(fid: str | None = None, limit: int = 12) -> list[dict]:
+    with _lock:
+        items = [j for j in _jobs.values() if fid is None or j.get("fid") in (fid, None)]
+        items.sort(key=lambda j: j["created_at"], reverse=True)
+        out = []
+        for j in items[:limit]:
+            lv = [e.get("level") for e in j["events"] if e.get("type") == "log"]
+            out.append({"id": j["id"], "kind": j["kind"], "label": j["label"], "status": j["status"],
+                        "progress": j["progress"], "message": j["message"], "created_at": j["created_at"],
+                        "errors": lv.count("error"), "warnings": lv.count("warning")})
         return out
 
 

@@ -78,6 +78,7 @@ def process_document(fid: str, doc_id: str, src: str, job_id: str | None = None,
         store.update_doc(fid, doc_id, stato="elaborazione", messaggio=msg)
         if job_id:
             jobs.progress(job_id, base + weight * frac, f"{nome} · {msg}")
+            jobs.log(job_id, f"  {msg}")
 
     tmp = tempfile.mkdtemp(prefix="ft_ingest_")
     try:
@@ -148,11 +149,23 @@ def process_document(fid: str, doc_id: str, src: str, job_id: str | None = None,
                          ocr=ocr_done, pdf=pdf_ok, firmato=firmato, stato="indicizzazione",
                          messaggio="Indicizzazione", indicizzato=False, analizzato=False)
 
+        if job_id:
+            if ocr_done:
+                jobs.log(job_id, "  ✓ OCR italiano applicato", "success")
+            if vuote:
+                jobs.log(job_id, f"  ⚠ Pagine senza testo leggibile: {', '.join(map(str, vuote[:30]))}"
+                         + (" …" if len(vuote) > 30 else ""), "warning")
         step(0.75, "Indicizzazione per la ricerca")
         search.index_document(fid, doc_id, job_id, base + weight * 0.75, weight * 0.25)
         msg = "Pronto" if caratteri else "Nessun testo leggibile"
+        if job_id:
+            n_car = f"{caratteri:,}".replace(",", ".")
+            jobs.log(job_id, f"  ✓ {nome}: {len(pages)} {'pagina' if len(pages) == 1 else 'pagine'}, {n_car} caratteri"
+                     if caratteri else f"  ⚠ {nome}: nessun testo leggibile", "success" if caratteri else "warning")
         return store.update_doc(fid, doc_id, stato="pronto" if caratteri else "avviso", messaggio=msg)
     except Exception as e:
+        if job_id:
+            jobs.log(job_id, f"  ✗ {nome}: {e}", "error")
         return store.update_doc(fid, doc_id, stato="errore", messaggio=str(e)[:300])
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -172,12 +185,16 @@ def ingest_job(job_id: str, fid: str, paths: list[str]):
         records.append((store.new_doc(fid, os.path.basename(p), sorgente=p), p))
     jobs.emit(job_id, {"type": "docs_changed"})
     n = len(records)
+    jobs.log(job_id, f"Acquisizione di {n} documenti nel fascicolo")
     for i, (meta, p) in enumerate(records):
         if jobs.is_cancelled(job_id):
             store.update_doc(fid, meta["id"], stato="errore", messaggio="Annullato")
             continue
+        jobs.log(job_id, f"[{i + 1}/{n}] {os.path.basename(p)}")
         process_document(fid, meta["id"], p, job_id, base=i / n, weight=1 / n)
         jobs.emit(job_id, {"type": "docs_changed"})
+    jobs.progress(job_id, 1.0, "Completato")
+    jobs.log(job_id, "Acquisizione completata", "success")
     jobs.emit(job_id, {"type": "done", "added": n})
 
 
@@ -210,11 +227,14 @@ def index_pending_job(job_id: str, fid: str, doc_ids: list[str]):
         if jobs.is_cancelled(job_id):
             break
         try:
+            jobs.log(job_id, f"[{i + 1}/{n}] Indicizzazione {(store.doc(fid, d) or {}).get('nome', d)}")
             search.index_document(fid, d, job_id, i / n, 1 / n)
             caratteri = (store.doc(fid, d) or {}).get("caratteri", 0)
             store.update_doc(fid, d, stato="pronto" if caratteri else "avviso",
                              messaggio="Pronto" if caratteri else "Nessun testo leggibile")
         except Exception as e:
+            jobs.log(job_id, f"  ✗ {e}", "error")
             store.update_doc(fid, d, stato="errore", messaggio=str(e)[:300])
         jobs.emit(job_id, {"type": "docs_changed"})
+    jobs.progress(job_id, 1.0, "Completato")
     jobs.emit(job_id, {"type": "done"})

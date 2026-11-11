@@ -9,6 +9,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 const fmtInt = (n) => Number(n || 0).toLocaleString('it-IT');
 const fmtEuro = (n) => '€ ' + Number(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const icon = (name, cls = '') => `<span class="ms ${cls}">${name}</span>`;
+const pct = (f) => `${Math.max(0, Math.min(100, Math.round((f || 0) * 100)))}%`;
+/** Barra di avanzamento con percentuale (1%) e messaggio: usata da tutte le elaborazioni */
+const progressBlock = (id, label, frac = 0, msg = '', actions = '') => `
+  <div class="pblock" id="${id}">
+    <div class="pblock-head"><span class="pblock-label">${esc(label)}</span><span class="pblock-pct" data-pct>${pct(frac)}</span></div>
+    <div class="progress"><div data-bar style="width:${pct(frac)}"></div></div>
+    <div class="pblock-foot"><span class="pblock-msg" data-msg>${esc(msg)}</span>${actions}</div>
+  </div>`;
+const setProgress = (el, frac, msg) => {
+  if (!el) return;
+  const p = pct(frac);
+  const bar = el.querySelector('[data-bar]'); if (bar) bar.style.width = p;
+  const t = el.querySelector('[data-pct]'); if (t) t.textContent = p;
+  if (msg !== undefined) { const m = el.querySelector('[data-msg]'); if (m) m.textContent = msg; }
+};
 
 const FT = {
   fid: null,
@@ -410,20 +425,71 @@ const FT = {
       if (r.jobs.length) {
         act.classList.remove('hidden');
         const j = r.jobs[0];
-        $('#activity-txt').textContent = r.jobs.length > 1 ? `${r.jobs.length} attività in corso` : `${j.label}${j.progress ? ` · ${Math.round(j.progress * 100)}%` : ''}`;
+        $('#activity-txt').textContent = r.jobs.length > 1 ? `${r.jobs.length} attività in corso` : `${j.label} · ${pct(j.progress)}`;
       } else act.classList.add('hidden');
       if (r.jobs.some(j => j.kind === 'ingest' || j.kind === 'index' || j.kind === 'pdf')) this.refreshDocs();
+      this.renderSidebarJobs(r.jobs.filter(j => j.kind === 'ingest' || j.kind === 'index'));
     } catch (e) { /* server in avvio */ }
     setTimeout(() => this.pollJobs(), (this.jobs && this.jobs.length) ? 1500 : 4000);
   },
-  activityMenu(anchor) {
-    const items = (this.jobs || []).map(j => `<div style="padding:8px 10px">
-      <div style="display:flex;align-items:center;gap:8px;font-weight:500"><span class="spinner"></span><span class="grow" style="flex:1">${esc(j.label)}</span>
-      <button class="icon-btn" data-cancel="${j.id}" title="Annulla" style="width:24px;height:24px">${icon('close', 'sm')}</button></div>
-      <div class="faint" style="font-size:11.5px;margin:4px 0 6px 22px">${esc(j.message || '')}</div>
-      <div class="progress" style="margin-left:22px"><div style="width:${Math.round((j.progress || 0) * 100)}%"></div></div></div>`).join('');
-    const pop = this.popover(anchor, `<div class="menu-head">Attività in corso</div>${items || '<div class="faint" style="padding:8px 10px">Nessuna</div>'}`, 'right');
+  renderSidebarJobs(list) {
+    const box = $('#sb-jobs');
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = list.map(j => progressBlock(`sbj-${j.id}`, j.label, j.progress, j.message,
+      `<span class="pblock-actions">${j.errors ? `<span class="chip c-red">${icon('error')}${j.errors}</span>` : ''}
+       <button class="btn plain sm-btn" data-log="${j.id}" data-label="${esc(j.label)}">${icon('receipt_long')}Log</button>
+       <button class="btn plain sm-btn danger" data-cancel="${j.id}">${icon('close')}</button></span>`)).join('');
+    $$('[data-log]', box).forEach(b => b.onclick = () => this.showLog(b.dataset.log, b.dataset.label));
+    $$('[data-cancel]', box).forEach(b => b.onclick = () => this.api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }));
+  },
+
+  async activityMenu(anchor) {
+    const recent = (await this.api(`/api/jobs/recent${this.fid ? `?fid=${this.fid}` : ''}`).catch(() => ({ jobs: [] }))).jobs;
+    const running = recent.filter(j => j.status === 'running');
+    const done = recent.filter(j => j.status !== 'running').slice(0, 6);
+    const actions = (j) => `<span class="pblock-actions">${j.errors ? `<span class="chip c-red">${icon('error')}${j.errors}</span>` : ''}${j.warnings ? `<span class="chip c-orange">${icon('warning')}${j.warnings}</span>` : ''}
+      <button class="btn plain sm-btn" data-log="${j.id}" data-label="${esc(j.label)}">${icon('receipt_long')}Log</button>
+      ${j.status === 'running' ? `<button class="btn plain sm-btn danger" data-cancel="${j.id}">${icon('close')}</button>` : ''}</span>`;
+    const pop = this.popover(anchor, `<div style="width:380px">
+      <div class="menu-head">Attività in corso</div>
+      ${running.length ? running.map(j => `<div style="padding:4px 8px">${progressBlock('act-' + j.id, j.label, j.progress, j.message, actions(j))}</div>`).join('') : '<div class="faint" style="padding:6px 10px 10px">Nessuna elaborazione in corso</div>'}
+      ${done.length ? `<div class="menu-sep"></div><div class="menu-head">Completate di recente</div>${done.map(j => `
+        <div class="pblock" style="margin:4px 8px"><div class="pblock-head"><span class="pblock-label">${esc(j.label)}</span>
+        <span class="pblock-pct">${icon(j.errors ? 'error' : 'check_circle', j.errors ? 'st-err xs' : 'st-ok xs')}</span></div>
+        <div class="pblock-foot"><span class="pblock-msg">${new Date(j.created_at * 1000).toLocaleTimeString('it-IT')}</span>${actions(j)}</div></div>`).join('')}` : ''}
+    </div>`, 'right');
+    $$('[data-log]', pop).forEach(b => b.addEventListener('click', () => { this.closePopover(); this.showLog(b.dataset.log, b.dataset.label); }));
     $$('[data-cancel]', pop).forEach(b => b.addEventListener('click', () => { this.api(`/api/jobs/${b.dataset.cancel}/cancel`, { method: 'POST' }); this.closePopover(); }));
+  },
+
+  /** Finestra di log di un'elaborazione (come il log di Pdf50), aggiornata in tempo reale */
+  showLog(jobId, title = 'Elaborazione') {
+    const m = this.modal(`${icon('receipt_long')}<h3>Log · ${esc(title)}</h3>
+      <label class="check-row" style="font-size:12px;margin-right:6px"><span class="switch"><input type="checkbox" data-onlyerr><span></span></span>Solo errori e avvisi</label>`,
+      `<div style="padding:14px 16px 0">${progressBlock('log-prog', title, 0, '')}</div>
+       <div class="log-box" style="margin:12px 16px 16px"><div class="log-head"><span data-count>0 righe</span></div>
+       <div class="log-panel" style="max-height:52vh;min-height:220px" data-panel></div></div>`, null);
+    $('.modal', m).style.width = 'min(820px, calc(100vw - 48px))';
+    const panel = $('[data-panel]', m);
+    let n = 0, ne = 0, nw = 0;
+    const counter = () => { $('[data-count]', m).textContent = `${n} righe${ne ? ` · ${ne} errori` : ''}${nw ? ` · ${nw} avvisi` : ''}`; };
+    const add = (ev) => {
+      const lvl = ev.level === 'warn' ? 'warning' : (ev.level || 'info');
+      const div = document.createElement('div');
+      div.className = `log-entry ${(ev.message || '').trim().startsWith('✓') ? 'success' : lvl}`;
+      div.innerHTML = `<span class="log-ts">${esc(ev.ts || '')}</span><span class="log-msg">${esc(ev.message)}</span>`;
+      panel.appendChild(div); n++; if (lvl === 'error') ne++; if (lvl === 'warning') nw++;
+      counter(); panel.scrollTop = panel.scrollHeight;
+    };
+    $('[data-onlyerr]', m).addEventListener('change', (e) => panel.classList.toggle('only-issues', e.target.checked));
+    const st = this.stream(jobId, {
+      log: add,
+      progress: (ev) => setProgress($('#log-prog', m), ev.fraction, ev.message),
+      fatal_error: (ev) => add({ level: 'error', message: `ERRORE CRITICO: ${ev.message}`, ts: ev.ts }),
+      done: () => setProgress($('#log-prog', m), 1, 'Completato'),
+    }, () => { if (!n) add({ level: 'info', message: 'Nessuna riga di log per questa elaborazione.' }); });
+    const close = m.close; m.close = () => { st.close(); close(); };
+    $('[data-close]', m).addEventListener('click', () => st.close());
   },
 
   // ── Popover, modali, toast ──────────────────────────────────────────────

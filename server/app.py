@@ -61,6 +61,10 @@ def create_app() -> Flask:
     def jobs_active():
         return jsonify({"jobs": jobs.active(request.args.get("fid"))})
 
+    @app.route("/api/jobs/recent")
+    def jobs_recent():
+        return jsonify({"jobs": jobs.recent(request.args.get("fid"))})
+
     @app.route("/api/jobs/<job_id>/stream")
     def job_stream(job_id):
         return jobs.stream(job_id)

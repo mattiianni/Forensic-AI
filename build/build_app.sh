@@ -37,7 +37,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSArchitecturePriority</key><array><string>arm64</string></array>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -57,6 +57,13 @@ rsync -a --exclude '__pycache__' --exclude '*.pyc' \
 step "Runtime Python 3.11 (con librerie)"
 rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude 'test/' --exclude 'tests/' \
   --exclude 'idlelib' --exclude 'tkinter' --exclude 'turtledemo' "$PY/" "$APP/Contents/Resources/runtime/arm64/python/"
+
+step "Precompilazione dei moduli Python (avvio più rapido; il bundle firmato resta in sola lettura)"
+"$APP/Contents/Resources/runtime/arm64/python/bin/python3.11" -m compileall -q -j 0 \
+  "$APP/Contents/Resources/runtime/arm64/python/lib/python3.11" "$APP/Contents/Resources/app" >/dev/null 2>&1 || true
+
+# script di comodo con shebang assoluti verso la macchina di build: non servono all'app
+find "$APP/Contents/Resources/runtime/arm64/python/bin" -type f ! -name 'python3*' -delete
 
 step "Strumenti: Tesseract, Ghostscript, pango"
 rsync -a "$TOOLS/" "$APP/Contents/Resources/runtime/arm64/tools/"

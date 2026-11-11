@@ -83,7 +83,9 @@ def _analizza_job(job_id: str, fid: str, doc_ids: list[str], model: str):
         nome = meta["nome"]
         base, peso = i / n, 1 / n
         testo = store.doc_text(fid, doc_id)
+        jobs.log(job_id, f"[{i + 1}/{n}] {nome}")
         if not testo.strip():
+            jobs.log(job_id, "  ⚠ Nessun testo leggibile: documento saltato", "warning")
             store.update_doc(fid, doc_id, analizzato=True, analisi_avviso="Nessun testo leggibile")
             continue
         t0 = time.time()
@@ -98,6 +100,8 @@ def _analizza_job(job_id: str, fid: str, doc_ids: list[str], model: str):
         dati = estrai_entita_e_relazioni_avanzato(blocchi, nome, model=model, callback_progresso=cb,
                                                   base_perc=0.0, peso_perc=0.6)
         store.save_json(fid, f"forensic/estrazioni/{doc_id}.json", dati)
+        ne, nr = len(dati.get("entita", [])), len(dati.get("relazioni", []))
+        jobs.log(job_id, f"  ✓ Estratti {ne} soggetti e {nr} relazioni", "success" if ne else "warning")
         with _grafi_lock:
             g.aggiungi_dati(dati, nome)
 
@@ -113,7 +117,12 @@ def _analizza_job(job_id: str, fid: str, doc_ids: list[str], model: str):
                                     "modello": model, "timestamp": datetime.now().strftime("%d/%m/%Y %H:%M")})
         _salva_stato(fid, stato)
         store.update_doc(fid, doc_id, analizzato=True)
+        if deduzione.startswith("Errore"):
+            jobs.log(job_id, f"  ✗ {deduzione[:300]}", "error")
+        else:
+            jobs.log(job_id, f"  ✓ Deduzioni incrociate completate ({round(time.time() - t0)} s)", "success")
         jobs.emit(job_id, {"type": "docs_changed"})
+    jobs.progress(job_id, 1.0, "Analisi completata")
     jobs.emit(job_id, {"type": "done"})
 
 
@@ -281,10 +290,18 @@ def _dossier_job(job_id: str, fid: str, model: str):
     ricevuti = []
 
     def cb(perc, msg, tokens=0, elapsed=0.0):
-        jobs.progress(job_id, perc, _pulisci(msg) + (f" · {tokens} token" if tokens else ""))
+        # il motore storico riporta 0,72 → 1,0 (fase finale della vecchia pipeline): riscalato su 0 → 1
+        frac = max(0.0, (perc - 0.72) / 0.28) if perc >= 0.72 else perc
+        jobs.progress(job_id, frac, _pulisci(msg) + (f" · {tokens} token" if tokens else ""))
 
     # streaming del testo: intercettiamo i token dal client
+    jobs.log(job_id, f"Redazione del dossier su {len(testi)} atti con {model}")
     testo = genera_dossier_forense_globale(g, testi, model=model, ha_grafo=True, callback_progresso=cb)
+    if testo.startswith("Errore"):
+        jobs.log(job_id, testo[:300], "error")
+    else:
+        jobs.log(job_id, f"✓ Dossier completato ({len(testo.split())} parole)", "success")
+    jobs.progress(job_id, 1.0, "Dossier completato")
     stato = _stato(fid)
     stato["dossier"] = testo
     stato["dossier_ts"] = datetime.now().strftime("%d/%m/%Y %H:%M")

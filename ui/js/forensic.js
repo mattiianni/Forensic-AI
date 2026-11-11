@@ -64,11 +64,9 @@ const FX = {
     this.ov = o;
     const stat = (ic, cls, label, value, note = '') => `<div class="stat"><div class="stat-top"><span class="stat-ico ${cls}">${icon(ic)}</span>${label}</div>
       <div class="stat-value">${value}</div>${note ? `<div class="stat-note">${note}</div>` : ''}</div>`;
-    const jobCard = this.job ? `<div class="job-card" id="fx-job"><span class="spinner lg"></span><div class="grow">
-        <div style="font-weight:600">${esc(this.job.label)}</div>
-        <div class="progress" style="margin-top:8px"><div id="fx-job-bar" style="width:${Math.round((this.job.fraction || 0) * 100)}%"></div></div>
-        <div class="jc-msg" id="fx-job-msg">${esc(this.job.message || 'Avvio…')}</div></div>
-        <button class="btn danger" onclick="FX.cancelJob()">${icon('stop_circle')}Interrompi</button></div>` : '';
+    const jobCard = this.job ? `<div style="margin-bottom:16px">${progressBlock('fx-job', this.job.label, this.job.fraction, this.job.message || 'Avvio…',
+        `<span class="pblock-actions"><button class="btn plain sm-btn" onclick="FT.showLog('${this.job.id}', 'Analisi forense')">${icon('receipt_long')}Log</button>
+         <button class="btn plain sm-btn danger" onclick="FX.cancelJob()">${icon('stop_circle')}Interrompi</button></span>`)}</div>` : '';
     let action = '';
     if (!this.job) {
       if (o.documenti_da_analizzare) {
@@ -113,8 +111,7 @@ const FX = {
       this.job.stream = FT.stream(r.job_id, {
         progress: (ev) => {
           this.job.fraction = ev.fraction; this.job.message = ev.message;
-          const bar = $('#fx-job-bar'); if (bar) bar.style.width = Math.round(ev.fraction * 100) + '%';
-          const msg = $('#fx-job-msg'); if (msg) msg.textContent = ev.message;
+          setProgress($('#fx-job'), ev.fraction, ev.message);
         },
         fatal_error: (ev) => FT.toast('Analisi interrotta: ' + ev.message, 'error', 8000),
       }, () => { this.job = null; FT.refreshDocs(); this.loadOverview(); FT.toast('Analisi forense completata', 'check_circle'); });
@@ -163,13 +160,18 @@ const FX = {
     const live = { role: 'assistant', content: '', riscontro: '' };
     box.insertAdjacentHTML('beforeend', `<div id="fc-live">${this.chatMsg(live)}</div>`);
     const el = $('#fc-live');
-    $('.md', el).innerHTML = `<div class="thinking"><span class="spinner"></span>Analisi della rete in corso…</div>`;
+    $('.md', el).innerHTML = progressBlock('fc-prog', 'Chat investigativa', 0.05, 'Analisi della rete in corso…');
+    let ntok = 0;
     $('#fc-scroll').scrollTop = 1e9;
     try {
       const r = await FT.api(`/api/forensic/${FT.fid}/chat`, { body: { message: q, model: FT.model } });
       this.chatRunning = FT.stream(r.job_id, {
-        graph_fact: (ev) => { live.riscontro = ev.text; el.innerHTML = this.chatMsg(live); $('.md', el).innerHTML = `<div class="thinking"><span class="spinner"></span>Il modello sta rispondendo…</div>`; },
-        token: (ev) => { live.content += ev.text; $('.md', el).innerHTML = FT.md(live.content); $('#fc-scroll').scrollTop = 1e9; },
+        graph_fact: (ev) => { live.riscontro = ev.text; el.innerHTML = this.chatMsg(live); $('.md', el).innerHTML = progressBlock('fc-prog', 'Chat investigativa', 0.25, 'Riscontro sul grafo calcolato · il modello sta leggendo…'); },
+        token: (ev) => {
+          live.content += ev.text; ntok++;
+          $('.md', el).innerHTML = progressBlock('fc-prog', 'Chat investigativa', 0.3 + 0.68 * Math.min(1, ntok / 500), `Scrittura della risposta · ${ntok} token`) + FT.md(live.content);
+          $('#fc-scroll').scrollTop = 1e9;
+        },
         fatal_error: (ev) => { live.content = 'Errore: ' + ev.message; },
       }, () => { this.chatRunning = null; this.updateChatSend(); this.loadChat(); });
       this.updateChatSend();
@@ -199,11 +201,11 @@ const FX = {
       const r = await FT.api(`/api/forensic/${FT.fid}/dossier`, { body: { model: FT.model } });
       this.dossierJob = r.job_id;
       $('#btn-dossier') && ($('#btn-dossier').disabled = true);
-      $('#fx-dossier-body').innerHTML = `<div class="job-card"><span class="spinner lg"></span><div class="grow"><div style="font-weight:600">Redazione del dossier CTU</div>
-        <div class="progress" style="margin-top:8px"><div id="dj-bar" style="width:2%"></div></div><div class="jc-msg" id="dj-msg">Il modello sta leggendo il fascicolo e la rete d'indagine…</div></div>
-        <button class="btn danger" onclick="FT.api('/api/jobs/${r.job_id}/cancel',{method:'POST'})">${icon('stop_circle')}Interrompi</button></div>`;
+      $('#fx-dossier-body').innerHTML = progressBlock('dj', 'Redazione del dossier CTU', 0.02, 'Il modello sta leggendo il fascicolo e la rete d\'indagine…',
+        `<span class="pblock-actions"><button class="btn plain sm-btn" onclick="FT.showLog('${r.job_id}', 'Dossier CTU')">${icon('receipt_long')}Log</button>
+         <button class="btn plain sm-btn danger" onclick="FT.api('/api/jobs/${r.job_id}/cancel',{method:'POST'})">${icon('stop_circle')}Interrompi</button></span>`);
       FT.stream(r.job_id, {
-        progress: (ev) => { const b = $('#dj-bar'); if (b) b.style.width = Math.round(ev.fraction * 100) + '%'; const m = $('#dj-msg'); if (m) m.textContent = ev.message; },
+        progress: (ev) => setProgress($('#dj'), ev.fraction, ev.message),
         fatal_error: (ev) => FT.toast('Dossier interrotto: ' + ev.message, 'error'),
       }, () => { this.dossierJob = null; if (this.view === 'dossier') this.loadDossier(); FT.toast('Dossier completato', 'check_circle'); });
     } catch (e) { FT.toast(e.message, 'error'); }

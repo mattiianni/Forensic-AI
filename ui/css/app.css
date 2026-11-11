@@ -548,3 +548,19 @@ table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .md .ref:hover { background: var(--accent); color: #fff; }
 .md .ref .ms { font-size: 13px; }
+
+/* ── Blocco di avanzamento con percentuale (tutte le elaborazioni) ───────── */
+.pblock { background: var(--content); border-radius: 10px; padding: 10px 12px; box-shadow: var(--shadow-1); }
+.pblock-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.pblock-label { font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pblock-pct { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.pblock-pct.big { font-size: 28px; letter-spacing: -0.02em; margin-right: 8px; }
+.pblock-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; min-height: 22px; }
+.pblock-msg { font-size: 11.5px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.pblock-actions { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.btn.sm-btn { height: 22px; padding: 0 7px; font-size: 11.5px; gap: 3px; }
+.btn.sm-btn .ms { font-size: 14px; }
+.sb-jobs { padding: 0 10px; display: flex; flex-direction: column; gap: 8px; }
+.sb-jobs:not(:empty) { padding-bottom: 10px; }
+.log-panel.only-issues .log-entry:not(.error):not(.warning) { display: none; }
+.pdf-overall { display: flex; align-items: baseline; margin-top: 10px; }

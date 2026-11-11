@@ -129,7 +129,8 @@ def _on_loaded():
 
 def main():
     global window
-    runtime.start_ollama()
+    # Il motore IA parte in background: la finestra compare subito (l'interfaccia attende i modelli da sola)
+    threading.Thread(target=runtime.start_ollama, daemon=True, name="ollama").start()
     port = _free_port()
     app = create_app()
     threading.Thread(target=lambda: app.run(host="127.0.0.1", port=port, threaded=True, use_reloader=False),

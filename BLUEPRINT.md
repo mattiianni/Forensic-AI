@@ -99,7 +99,7 @@ resta nella cronologia git (commit `419ff90`). `README.md` è ancora quello vecc
 ```
 Forensic Tools.app/Contents/
 ├── Info.plist                   CFBundleName "Forensic Tools", CFBundleIdentifier it.forensictools.app,
-│                                LSMinimumSystemVersion 13.0, LSArchitecturePriority arm64, icona AppIcon
+│                                LSMinimumSystemVersion 15.0, LSArchitecturePriority arm64, icona AppIcon
 ├── MacOS/Forensic Tools         launcher C (vedi 3.4)
 └── Resources/
     ├── AppIcon.icns
@@ -160,7 +160,7 @@ ripiega su `~/.ft-build/tools-arm64` e su `lib/Ollama.app/...` e `models/` del r
    (`sys.executable` = launcher, es. multiprocessing di ocrmypdf o `python -m docx2pdf`).
 4. Firma ad-hoc del bundle intero: `codesign --force --deep -s - "Forensic Tools.app"`.
 
-### 3.5 Ollama
+### 3.5 Ollama (avviato in un thread: la finestra non lo attende)
 
 - Si usa il binario universale `lib/Ollama.app/Contents/Resources/ollama` (`ollama serve`), **non** `open -a`
   (che non passa le variabili d'ambiente). Porta privata **127.0.0.1:11439**, così non interferisce con un
@@ -172,6 +172,23 @@ ripiega su `~/.ft-build/tools-arm64` e su `lib/Ollama.app/...` e `models/` del r
   scaricato con `OLLAMA_MODELS=$PWD/models ollama pull embeddinggemma` usando il binario incluso).
 - Prefissi embeddinggemma: documenti `"title: none | text: …"`, query `"task: search result | query: …"`.
 - `runtime.context_budget(model)`: 14b → 8192 (16384 con ≥30 GB); 7b → 12288 (8192 sotto 14 GB); altri 8192.
+
+### 3.5b Portabilità (verificata) e requisiti del Mac di destinazione
+
+- **Requisiti**: Mac Apple Silicon (M1 o successivi), **macOS 15 Sequoia o successivo**, circa 17 GB liberi, RAM consigliata ≥ 16 GB.
+  La soglia macOS 15 deriva da `pikepdf` (dipendenza di ocrmypdf, compilato con minos 15.0); Ghostscript conda richiede 14.5,
+  Ollama 14.0, Python e Tesseract 11.0. Le librerie MLX “v4” di Ollama (minos 26.2) vengono caricate solo dove supportate.
+- **Nessuna dipendenza dal Mac di build**: nessun percorso assoluto nel bundle (verificato con grep e `otool -L`; gli script
+  `python/bin/*` con shebang assoluti vengono eliminati in build). Font usati da fpdf2/fontconfig: font di sistema presenti
+  in ogni macOS.
+- **Prova eseguita**: app clonata in un'altra cartella, `~/.ft-build` rinominata, avvio → OCR di un PDF scansionato,
+  indicizzazione, risposta della Ricerca con «File, pagina»: tutto con le sole risorse interne.
+- **Gatekeeper**: l'app ha firma ad-hoc (non notarizzata). Se arriva da AirDrop/download/email è in quarantena: al primo avvio
+  usare clic destro → Apri (o Impostazioni di Sistema → Privacy e sicurezza → “Apri comunque”), oppure
+  `xattr -dr com.apple.quarantine "Forensic Tools.app"`. Copiata da disco esterno di norma non serve.
+- **Primo avvio di una copia nuova**: macOS verifica il sigillo dell'intero bundle (16 GB, modelli inclusi): può richiedere
+  1–2 minuti. Per questo la finestra si apre subito e Ollama parte in un thread; i moduli Python sono precompilati in build
+  (`compileall`) perché il bundle firmato è in sola lettura (`PYTHONDONTWRITEBYTECODE=1`).
 
 ### 3.6 Dati utente
 
@@ -382,6 +399,20 @@ fascicoli/<fid>/
 - **Visualizzatore documento** (modale grande): PDF in iframe alla pagina citata (`#page=N`) + pannello con il testo
   riconosciuto e le parole del passaggio evidenziate; pulsante “Apri con Anteprima”.
 - Scorciatoie: ⌘1/⌘2/⌘3 per le aree, ⌘O aggiungi file, ⌘⇧S sidebar, Esc chiude le modali.
+
+### 6.2b Avanzamento e log (requisito dell'utente: ogni elaborazione ha barra con percentuale all'1% e log errori)
+
+- Componente unico `progressBlock(id, label, frac, msg, actions)` + `setProgress(el, frac, msg)` in `app.js`
+  (titolo, percentuale arrotondata all'unità, barra, messaggio, azioni “Log”/“Annulla”).
+- Dove compare: sidebar (acquisizione e indicizzazione nel fascicolo), menu Attività in toolbar (in corso + completate di recente
+  con conteggio errori/avvisi), area PDF (percentuale complessiva pesata sulle 5 fasi e sulle sottocartelle, oltre alla barra per
+  file originale di Pdf50; operazioni dirette), Ricerca e chat forense (fasi: passaggi trovati → lettura → token generati),
+  analisi forense, dossier (il motore storico riporta 0,72→1,0: riscalato a 0→1 in `forensic_area._dossier_job`).
+- **Finestra di log** `FT.showLog(jobId, titolo)`: stream SSE dall'inizio del job, righe con orario e livello
+  (info/successo/avviso/errore colorati), contatori, interruttore “Solo errori e avvisi”. Backend: `jobs.log(job_id, msg, level)`
+  usato da pipeline (ogni fase per documento, OCR, pagine senza testo, errori), indicizzazione, analisi forense e dossier;
+  le eccezioni non gestite diventano righe di errore. `GET /api/jobs/recent?fid=` elenca i job recenti con errori/avvisi.
+- L'area PDF mantiene il proprio pannello log identico a Pdf50 (log comprimibile nel risultato).
 
 ### 6.3 Area PDF (`ui/js/pdf.js`, oggetto `PDF`)
 Porting di `static/js/app.js` di Pdf50 con **gli stessi id DOM e la stessa logica**. Cambiano solo:

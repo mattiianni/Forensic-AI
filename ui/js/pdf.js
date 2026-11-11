@@ -224,6 +224,8 @@ const PDF = {
     } catch (e) { return FT.toast('Impossibile avviare l\'elaborazione: ' + e.message, 'error'); }
     this.state.jobId = data.job_id;
     this.state.currentStep = 0;
+    Object.assign(this.state, { overallPct: 0, folderIdx: 0, folderTotal: 0 });
+    $('#progress-pct').textContent = '0%';
     $('#setup-card').classList.add('hidden');
     $('#progress-card').classList.remove('hidden');
     $('#steps-indicator').classList.remove('hidden');
@@ -231,20 +233,31 @@ const PDF = {
     this.state.stream = FT.stream(data.job_id, { '*': (ev) => this.handleEvent(ev) });
   },
 
+  // Avanzamento complessivo: peso delle 5 fasi di Pdf50 (e delle sottocartelle in modalità «Suddiviso»)
+  STEP_W: { 1: [0, 0.04], 2: [0.04, 0.36], 3: [0.40, 0.48], 4: [0.88, 0.06], 5: [0.94, 0.06] },
+  overall(stepFrac) {
+    const st = this.state, [b, w] = this.STEP_W[st.currentStep] || [0, 0];
+    const inFolder = b + w * Math.max(0, Math.min(1, stepFrac));
+    const f = st.folderTotal ? ((st.folderIdx - 1) + inFolder) / st.folderTotal : inFolder;
+    st.overallPct = Math.max(st.overallPct || 0, f);
+    $('#progress-pct').textContent = pct(st.overallPct);
+  },
+
   handleEvent(event) {
     switch (event.type) {
-      case 'step': this.setActiveStep(event.step); $('#progress-step-label').textContent = event.label; break;
+      case 'step': this.setActiveStep(event.step); $('#progress-step-label').textContent = event.label; this.overall(0); break;
       case 'scan_done': this.state.totalFiles = event.total; break;
       case 'progress': this.updateProgress(event); break;
       case 'split_progress': $('#progress-step-label').textContent = `Divisione: ${event.label || ''} (parte ${event.current} di ${event.total})`; break;
-      case 'folder_start': this.addLog(`── Cartella ${event.current}/${event.total}: "${event.folder}" (${event.file_count} file)`, 'info', event.ts); break;
+      case 'folder_start': this.state.folderIdx = event.current; this.state.folderTotal = event.total; this.state.currentStep = 2; this.overall(0); this.addLog(`── Cartella ${event.current}/${event.total}: "${event.folder}" (${event.file_count} file)`, 'info', event.ts); break;
       case 'log': this.addLog(event.message, event.level || 'info', event.ts); break;
       case 'done': this.handleDone(event); break;
       case 'fatal_error': this.handleFatalError(event); break;
     }
   },
   updateProgress(event) {
-    if (event.percent !== undefined) $('#progress-bar').style.width = event.percent + '%';
+    if (event.step && event.step !== this.state.currentStep) this.setActiveStep(event.step);
+    if (event.percent !== undefined) { $('#progress-bar').style.width = event.percent + '%'; this.overall(event.percent / 100); }
     if (event.file) $('#progress-current-file').textContent = `${event.operation}: ${event.file.split('/').pop()}`;
     if (event.current && event.total) $('#progress-count').textContent = `${event.current} / ${event.total}`;
   },
@@ -270,6 +283,7 @@ const PDF = {
   clearLog() { $('#log-panel').innerHTML = ''; },
 
   handleDone(event) {
+    this.state.overallPct = 1; $('#progress-pct').textContent = '100%';
     this.setActiveStep(6);
     $('#progress-bar').style.width = '100%';
     $('#progress-step-label').textContent = 'Completato';
@@ -380,7 +394,9 @@ const PDF = {
     $('#progress-card').classList.remove('hidden');
     $('#btn-cancel').classList.add('hidden');
     const bar = $('#progress-bar'), label = $('#progress-step-label');
-    bar.style.width = '30%'; label.textContent = 'Elaborazione in corso…';
+    const pctEl = $('#progress-pct');
+    new MutationObserver(() => { pctEl.textContent = bar.style.width || '0%'; }).observe(bar, { attributes: true, attributeFilter: ['style'] });
+    bar.style.width = '5%'; label.textContent = 'Elaborazione in corso…';
     try {
       let result, workingPdf = pdfPath;
       if (op === 'compress' || op === 'compress+split') {
@@ -519,6 +535,8 @@ const PDF = {
     $('#drop-zone').classList.remove('hidden');
     $('#source-info').classList.add('hidden');
     $('#progress-bar').style.width = '0%';
+    $('#progress-pct').textContent = '0%';
+    Object.assign(this.state, { overallPct: 0, folderIdx: 0, folderTotal: 0 });
     $('#progress-current-file').textContent = '';
     $('#progress-count').textContent = '';
     $('#progress-step-label').textContent = 'Elaborazione in corso…';

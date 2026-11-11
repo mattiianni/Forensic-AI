@@ -170,26 +170,30 @@ const RC = {
     const live = { role: 'assistant', content: '', fonti: [] };
     this.live = live;
     $('#rc-messages').insertAdjacentHTML('beforeend', `<div class="msg assistant" id="rc-live"><div class="avatar">${icon('manage_search')}</div>
-      <div class="answer"><div class="thinking"><span class="spinner"></span><span data-st>Cerco nei documenti…</span></div><div class="md hidden"></div><div data-srcs></div></div></div>`);
+      <div class="answer"><div class="rc-prog">${progressBlock('rc-prog', 'Ricerca nei documenti', 0.02, 'Cerco nei documenti…')}</div><div class="md hidden"></div><div data-srcs></div></div></div>`);
     this.scrollEnd();
     const el = $('#rc-live');
     const t0 = Date.now();
+    const prog = () => $('#rc-prog', el);
+    let ntok = 0;
     try {
       const r = await FT.api(`/api/ricerca/${FT.fid}/ask`, { body: { question: q, model: FT.model } });
       this.running = FT.stream(r.job_id, {
-        progress: (ev) => { $('[data-st]', el).textContent = ev.message; },
+        progress: (ev) => setProgress(prog(), Math.min(0.24, ev.fraction), ev.message),
         sources: (ev) => {
           live.fonti = ev.sources;
-          $('[data-st]', el).textContent = ev.sources.length ? `Trovati ${ev.sources.length} passaggi pertinenti · il modello sta leggendo…` : 'Nessun passaggio pertinente';
+          setProgress(prog(), 0.25, ev.sources.length ? `Trovati ${ev.sources.length} passaggi pertinenti · il modello sta leggendo…` : 'Nessun passaggio pertinente');
         },
         token: (ev) => {
           live.content += ev.text;
-          $('.thinking', el).classList.add('hidden');
+          ntok++;
+          setProgress(prog(), 0.3 + 0.68 * Math.min(1, ntok / 350), `Scrittura della risposta · ${ntok} token`);
           const md = $('.md', el); md.classList.remove('hidden');
           md.innerHTML = this.formatAnswer(live.content, live.fonti);
           this.scrollEnd();
         },
         done: (ev) => {
+          setProgress(prog(), 1, 'Completata');
           if (ev.text) live.content = ev.text;
           live.secondi = ev.elapsed || Math.round((Date.now() - t0) / 100) / 10;
           live.modello = FT.model;
