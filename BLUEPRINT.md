@@ -371,7 +371,7 @@ fascicoli/<fid>/
 
 ### 6.2 Struttura
 - **Toolbar** (66 px sotto la barra nativa, stesso colore pieno; area di trascinamento `.drag`, doppio clic = zoom): a sinistra il pulsante sidebar e il marchio
-  (icona + “Forensic Tools”); al centro le **tre tab giganti** (segmented control grande: icona in riquadro colorato,
+  (solo la scritta “Forensic Tools”, 26 px bold, senza icona: richiesta dell'utente); al centro le **tre tab giganti** (segmented control grande: icona in riquadro colorato,
   titolo, sottotitolo; colore per area: PDF rosso, Ricerca blu, Forensic viola); a destra l'indicatore attività
   (spinner + job), il selettore modello e le impostazioni (tema e stato dei motori offline).
 - **Sidebar Fascicolo** (290 px, nascondibile con ⌘⇧S): selettore del fascicolo (menu: elenco, nuovo, rinomina,
@@ -388,7 +388,9 @@ Porting di `static/js/app.js` di Pdf50 con **gli stessi id DOM e la stessa logic
 le emoji diventano icone Material; le cartelle si scelgono con il dialogo nativo (`pywebview.api.choose_folder`)
 seguito da `/api/pdf/scan`; il trascinamento usa i percorsi reali (`PDF.onNativeDrop(paths)`: una cartella → sorgente;
 un PDF → modalità PDF diretta; altri file → `/api/pdf/prepare-files`); le URL hanno il prefisso `/api/pdf/`;
-lo stream usa `FT.stream`; c'è lo switch “Aggiungi i documenti anche al fascicolo” (attivo di default);
+lo stream usa `FT.stream`; c'è lo switch “Aggiungi i documenti anche al fascicolo” (attivo di default); c'è lo switch **“Applica OCR italiano”**
+(attivo di default come in Pdf50; spento = i PDF vengono uniti così come sono, parametro `ocr` di `/api/pdf/start`,
+documenti registrati nel fascicolo con `ocr=False`; nota: ocrmypdf invalida le firme digitali nei PDF in uscita);
 c'è il pulsante “Mostra nel Finder”. Flussi: setup → progresso (5 step: Scansione, Conversione, OCR, Unione,
 Salvataggio; barra, file corrente, log) → risultato (statistiche, parti, errori, log comprimibile, post-elaborazione inline).
 

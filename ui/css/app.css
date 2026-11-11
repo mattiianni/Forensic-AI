@@ -186,7 +186,7 @@ h4 { font-size: 13px; font-weight: 600; }
 
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand img { width: 30px; height: 30px; border-radius: 7px; box-shadow: var(--shadow-1); pointer-events: none; }
-.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: -0.01em; pointer-events: none; }
+.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: -0.025em; pointer-events: none; white-space: nowrap; }
 
 /* Le tre macro-aree: segmented control grande */
 .areas {

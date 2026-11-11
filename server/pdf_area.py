@@ -23,12 +23,12 @@ bp = Blueprint("pdf_area", __name__)
 LIMIT_BYTES = 50 * 1024 * 1024   # 50 MB
 
 
-def _register_in_fascicolo(job_id: str, src: str, ocr_pdf: str):
+def _register_in_fascicolo(job_id: str, src: str, ocr_pdf: str, ocr: bool = True):
     fid = jobs.meta(job_id, "fid")
     if not fid or not jobs.meta(job_id, "add_to_fascicolo"):
         return
     try:
-        doc_id = pipeline.register_pdf(fid, src, ocr_pdf)
+        doc_id = pipeline.register_pdf(fid, src, ocr_pdf, ocr=ocr)
         registered = jobs.meta(job_id, "registered") or []
         registered.append(doc_id)
         job = jobs.get(job_id)
@@ -109,15 +109,26 @@ def _convert_and_ocr(
     # ── OCR ──────────────────────────────────────────────────────────────────
     ocr_pdfs = []
     total_conv = len(converted_pdfs)
+    # Interruttore «Applica OCR italiano» (Forensic Tools): attivo di default come in Pdf50.
+    apply_ocr = jobs.meta(job_id, 'ocr', True)
+    if not apply_ocr:
+        log('OCR disattivato: i documenti vengono uniti così come sono')
 
     for i, item in enumerate(converted_pdfs):
         if jobs.is_cancelled(job_id):
             return [], errors
 
+        ocr_out = os.path.join(ocr_dir, f'ocr_{i:05d}.pdf')
+        if not apply_ocr:
+            progress(i + 1, total_conv, item['name'], 'Senza OCR', step_ocr)
+            shutil.copy2(item['path'], ocr_out)
+            ocr_pdfs.append(ocr_out)
+            _register_in_fascicolo(job_id, item['src'], ocr_out, ocr=False)
+            continue
+
         progress(i + 1, total_conv, item['name'], 'OCR Italiano', step_ocr)
         log(f'[{i+1}/{total_conv}] OCR: {item["name"]}')
 
-        ocr_out = os.path.join(ocr_dir, f'ocr_{i:05d}.pdf')
         try:
             ocr_processor.apply_ocr(item['path'], ocr_out)
             log(f'  ✓ OCR applicato')
@@ -657,6 +668,7 @@ def start_job():
     job_id = jobs.create('pdf', label=f'PDF · {folder_name}', fid=fid, mode=mode,
                          folder_name=folder_name, source_is_temp=bool(data.get('source_is_temp')),
                          add_to_fascicolo=bool(data.get('add_to_fascicolo')) and bool(fid and store.exists(fid)),
+                         ocr=bool(data.get('ocr', True)),
                          registered=[])
     target = _run_unified if mode == 'unified' else _run_per_folder
     jobs.run(job_id, target, source, output)

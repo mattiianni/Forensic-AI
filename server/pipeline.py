@@ -181,7 +181,7 @@ def ingest_job(job_id: str, fid: str, paths: list[str]):
     jobs.emit(job_id, {"type": "done", "added": n})
 
 
-def register_pdf(fid: str, source_path: str, ready_pdf: str):
+def register_pdf(fid: str, source_path: str, ready_pdf: str, ocr: bool = True):
     """Usato dall'area PDF: registra un file già convertito e passato all'OCR, evitando un secondo OCR."""
     existing = store.find_doc_by_source(fid, source_path)
     if existing:
@@ -198,7 +198,7 @@ def register_pdf(fid: str, source_path: str, ready_pdf: str):
     pages = _pdf_pages(ready_pdf)
     store.save_pages(fid, meta["id"], pages)
     caratteri = sum(len(p["text"]) for p in pages)
-    store.update_doc(fid, meta["id"], pagine=len(pages), caratteri=caratteri, pdf=True, ocr=True,
+    store.update_doc(fid, meta["id"], pagine=len(pages), caratteri=caratteri, pdf=True, ocr=ocr,
                      pagine_senza_testo=[p["n"] for p in pages if len(p["text"]) < MIN_CHARS_PAGE],
                      stato="indicizzazione", messaggio="Indicizzazione")
     return meta["id"]

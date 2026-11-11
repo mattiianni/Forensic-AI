@@ -15,7 +15,6 @@
     <div class="toolbar-left drag">
       <button class="icon-btn" id="btn-sidebar" title="Mostra/nascondi fascicolo (⌘⇧S)"><span class="ms">left_panel_close</span></button>
       <div class="brand drag">
-        <img src="/ui/app-icon.png" alt="" />
         <span class="brand-name">Forensic Tools</span>
       </div>
     </div>
@@ -181,6 +180,12 @@
                 <button class="btn" id="btn-output"><span class="ms">folder_open</span>Sfoglia</button>
               </div>
 
+              <div class="start-row" style="margin-bottom:-8px">
+                <label class="check-row grow" id="ocr-row" title="Rende ricercabile il testo delle scansioni: consigliato, semplifica il lavoro del modello offline in Ricerca e Forensic AI">
+                  <span class="switch"><input type="checkbox" id="apply-ocr" checked><span></span></span>
+                  <span>Applica OCR italiano <span class="badge-rec">consigliato</span> <span class="faint" style="font-size:12px">· spento: i documenti vengono uniti così come sono</span></span>
+                </label>
+              </div>
               <div class="start-row">
                 <label class="check-row grow" id="add-fascicolo-row" title="I file convertiti e passati all'OCR vengono aggiunti al fascicolo, pronti per Ricerca e Forensic AI">
                   <span class="switch"><input type="checkbox" id="add-to-fascicolo" checked><span></span></span>

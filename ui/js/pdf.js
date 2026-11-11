@@ -132,6 +132,7 @@ const PDF = {
     $('#mode-section').classList.add('hidden');
     $('#pdf-ops-panel').classList.remove('hidden');
     $('#add-fascicolo-row').classList.add('hidden');
+    $('#ocr-row').classList.add('hidden');
     if (data.pages) $('#range-total-label').textContent = `(totale: ${data.pages})`;
     $('#btn-start-label').textContent = 'Avvia elaborazione';
     if (!this.state.outputPath) this.setOutput(data.path.substring(0, data.path.lastIndexOf('/')));
@@ -143,6 +144,7 @@ const PDF = {
     $('#mode-section').classList.remove('hidden');
     $('#pdf-ops-panel').classList.add('hidden');
     $('#add-fascicolo-row').classList.remove('hidden');
+    $('#ocr-row').classList.remove('hidden');
     $('#btn-start-label').textContent = 'Avvia conversione';
   },
 
@@ -217,7 +219,7 @@ const PDF = {
       data = await FT.api('/api/pdf/start', { body: {
         source_path: this.state.sourcePath, output_path: this.state.outputPath, mode,
         source_is_temp: this.state.sourceIsTemp, folder_name: this.state.folderName || null,
-        fid: FT.fid, add_to_fascicolo: $('#add-to-fascicolo').checked,
+        fid: FT.fid, add_to_fascicolo: $('#add-to-fascicolo').checked, ocr: $('#apply-ocr').checked,
       } });
     } catch (e) { return FT.toast('Impossibile avviare l\'elaborazione: ' + e.message, 'error'); }
     this.state.jobId = data.job_id;
